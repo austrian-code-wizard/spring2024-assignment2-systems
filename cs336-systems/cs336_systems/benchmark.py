@@ -141,7 +141,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--warmup-steps", type=int, default=1)
     parser.add_argument("--train-steps", type=int, default=5)
-    parser.add_argument("--run-backward", action="store_true", default=True)
+    parser.add_argument("--run-backward", action="store_true", default=False)
     args = parser.parse_args()
     model_args = MODEL_CONFIGS[args.model_config]
     logger.info(f"Running benchmark with model config: {args.model_config}")
