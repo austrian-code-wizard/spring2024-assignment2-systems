@@ -4,9 +4,11 @@ import logging
 import argparse
 import numpy as np
 from dataclasses import dataclass
-from typing import Optional, Literal
+from typing import Optional
+from cs336_basics.optimizer import AdamW
 from cs336_basics.nn_utils import cross_entropy
 from cs336_basics.model import BasicsTransformerLM
+from torch.profiler import profile, record_function, ProfilerActivity
 
 
 # setup logging
@@ -33,6 +35,14 @@ class TrainerArgs:
     warmup_steps: int = 1
     train_steps: int = 5
     run_backward: bool = True
+
+
+@dataclass
+class OptimizerArgs:
+    lr: float = 1e-4
+    betas: tuple[float, float] = (0.9, 0.99)
+    eps: float = 1e-9
+    weight_decay: float = 0.1
 
 
 MODEL_CONFIGS = {
@@ -69,7 +79,19 @@ MODEL_CONFIGS = {
 }
 
 
-def main(model_args: ModelArgs, trainer_args: TrainerArgs):
+def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW, enable_backward):
+    with record_function('forward_pass'):
+        out = model(inputs)
+    if enable_backward:
+        with record_function('backward_pass'):
+            loss = cross_entropy(out, inputs)
+            loss.backward() 
+        with record_function('optimizer'):
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+
+
+def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: OptimizerArgs):
     model = BasicsTransformerLM(
         vocab_size=model_args.vocab_size,
         context_length=model_args.context_length,
@@ -80,42 +102,34 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs):
         attn_pdrop=model_args.attn_pdrop,
         residual_pdrop=model_args.residual_pdrop,
     )
+    optimizer = AdamW(model.parameters(), lr=optimizer_args.lr, betas=optimizer_args.betas, eps=optimizer_args.eps, weight_decay=optimizer_args.weight_decay)
     model.to("cuda")
     model.train()
     dummy_data = torch.randint(
         0, model_args.vocab_size, (trainer_args.batch_size, model_args.context_length)
     ).to("cuda")
-    dummy_labels = torch.randint(
-        0, model_args.vocab_size, (trainer_args.batch_size, model_args.context_length)
-    ).to("cuda")
 
-    forward_times = []
-    backward_times = []
-    for i in range(trainer_args.warmup_steps + trainer_args.train_steps):
-        start_time = timeit.default_timer()
-        out = model(dummy_data)
+    for _ in range(trainer_args.warmup_steps):
+        run_step(model, dummy_data, AdamW(model.parameters()), True)
+    torch.cuda.synchronize()
+
+    with profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
+        experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True),
+        record_shapes=True,
+        profile_memory=False,
+        with_stack=True,
+    ) as prof:
+        for _ in range(trainer_args.train_steps):
+            run_step(model, dummy_data, optimizer, trainer_args.run_backward)
+            prof.step()
         torch.cuda.synchronize()
-        if i >= trainer_args.warmup_steps:
-            forward_times.append(timeit.default_timer() - start_time)
 
-        if not trainer_args.run_backward:
-            continue
-
-        loss = cross_entropy(out, dummy_labels)
-        start_time = timeit.default_timer()
-        loss.backward()
-        torch.cuda.synchronize()
-        if i >= trainer_args.warmup_steps:
-            backward_times.append(timeit.default_timer() - start_time)
-    
-    logger.info(
-        f"Forward: Avg = {np.mean(forward_times).round(4)}s, std: {np.std(forward_times).round(4)}s"
-    )
-    if trainer_args.run_backward:
-        logger.info(
-            f"Backward: Avg = {np.mean(backward_times).round(4)}s, std: {np.std(backward_times).round(4)}s"
-        )
-
+    prof.export_stacks("lm_profiler_stacks.txt", "self_cuda_time_total")
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=50))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
