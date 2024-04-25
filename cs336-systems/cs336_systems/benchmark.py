@@ -150,5 +150,6 @@ if __name__ == "__main__":
         train_steps=args.train_steps,
         run_backward=args.run_backward,
     )
+    optimizer_args = OptimizerArgs()
     logger.info(f"Trainer args: {trainer_args}")
-    main(model_args, trainer_args)
+    main(model_args, trainer_args, optimizer_args)
