@@ -128,20 +128,12 @@ if __name__ == "__main__":
     parser.add_argument("--train-steps", type=int, default=5)
     parser.add_argument("--run-backward", action="store_true", default=True)
     args = parser.parse_args()
-    model_args = ModelArgs(
-        vocab_size=args.vocab_size,
-        context_length=args.context_length,
-        d_model=args.d_model,
-        num_layers=args.num_layers,
-        num_heads=args.num_heads,
-        d_ff=args.d_ff,
-        attn_pdrop=args.attn_pdrop,
-        residual_pdrop=args.residual_pdrop,
-    )
+    model_args = MODEL_CONFIGS[args.model_config]
+    logger.info(f"Running benchmark with model config: {args.model_config}")
     trainer_args = TrainerArgs(
-        batch_size=args.batch_size,
         warmup_steps=args.warmup_steps,
         train_steps=args.train_steps,
         run_backward=args.run_backward,
     )
+    logger.info(f"Trainer args: {trainer_args}")
     main(model_args, trainer_args)
