@@ -121,8 +121,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model-config",
-        type=Literal["small", "medium", "large", "xl", "2.7B"],
+        type=str,
         default="small",
+        choices=MODEL_CONFIGS.keys(),
     )
     parser.add_argument("--warmup-steps", type=int, default=1)
     parser.add_argument("--train-steps", type=int, default=5)
