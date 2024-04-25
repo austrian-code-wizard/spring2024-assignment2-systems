@@ -17,12 +17,12 @@ logger.setLevel(logging.DEBUG)
 
 @dataclass
 class ModelArgs:
-    vocab_size: int = 10000
-    context_length: int = 128
     d_model: int
     num_layers: int
     num_heads: int
     d_ff: int
+    vocab_size: int = 10000
+    context_length: int = 128
     attn_pdrop: Optional[float] = 0.1
     residual_pdrop: Optional[float] = 0.05
 
