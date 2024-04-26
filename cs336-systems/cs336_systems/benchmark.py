@@ -108,7 +108,7 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
         residual_pdrop=model_args.residual_pdrop,
     )
     optimizer = AdamW(model.parameters(), lr=optimizer_args.lr, betas=optimizer_args.betas, eps=optimizer_args.eps, weight_decay=optimizer_args.weight_decay)
-    model.to("cuda")
+    model = model.to("cuda")
     model.train()
     dummy_data = torch.randint(
         0, model_args.vocab_size, (trainer_args.batch_size, model_args.context_length)
