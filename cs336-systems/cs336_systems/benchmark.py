@@ -5,7 +5,7 @@ import argparse
 import numpy as np
 from contextlib import nullcontext
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 from cs336_basics.optimizer import AdamW
 from cs336_basics.nn_utils import cross_entropy
 from cs336_basics.model import BasicsTransformerLM
@@ -82,18 +82,25 @@ MODEL_CONFIGS = {
 }
 
 
-def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW, enable_backward: bool, mixed_precision: bool = False):
+def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW, enable_backward: bool, mixed_precision: bool = False) -> Tuple[float, float, float]:
     with record_function('forward_pass'):
         with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
+            start = timeit.default_timer()
             out = model(inputs)
+            forward_time = timeit.default_timer() - start
     if enable_backward:
         with record_function('backward_pass'):
             with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
+                start = timeit.default_timer()
                 loss = cross_entropy(out, inputs)
             loss.backward() 
+            backward_time = timeit.default_timer() - start
         with record_function('optimizer'):
+            start = timeit.default_timer()
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
+            optimizer_time = timeit.default_timer() - start
+    return forward_time, backward_time, optimizer_time
 
 
 def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: OptimizerArgs):
@@ -127,10 +134,19 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
         profile_memory=False,
         with_stack=True,
     ) as prof:
+        forward_times = []
+        backward_times = []
+        optimizer_times = []
         for _ in range(trainer_args.train_steps):
-            run_step(model, dummy_data, optimizer, trainer_args.run_backward, mixed_precision=trainer_args.mixed_precision)
+            f, b, o = run_step(model, dummy_data, optimizer, trainer_args.run_backward, mixed_precision=trainer_args.mixed_precision)
+            forward_times.append(f)
+            backward_times.append(b)
+            optimizer_times.append(o)
             prof.step()
         torch.cuda.synchronize()
+    print(f"Forward time: {np.mean(forward_times):.4f} s")
+    print(f"Backward time: {np.mean(backward_times):.4f} s")
+    print(f"Optimizer time: {np.mean(optimizer_times):.4f} s")
 
     prof.export_stacks("lm_profiler_stacks.txt", "self_cuda_time_total")
     print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=50))
