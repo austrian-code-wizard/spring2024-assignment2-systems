@@ -28,6 +28,7 @@ class ModelArgs:
     context_length: int = 128
     attn_pdrop: Optional[float] = 0.1
     residual_pdrop: Optional[float] = 0.05
+    use_layer_norm: Optional[bool] = False
 
 
 @dataclass
@@ -89,7 +90,6 @@ def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW,
         with record_function('backward_pass'):
             with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
                 loss = cross_entropy(out, inputs)
-                print(loss)
             loss.backward() 
         with record_function('optimizer'):
             optimizer.step()
@@ -147,8 +147,10 @@ if __name__ == "__main__":
     parser.add_argument("--train-steps", type=int, default=5)
     parser.add_argument("--run-backward", action="store_true", default=False)
     parser.add_argument("--mixed-precision", action="store_true", default=False)
+    parser.add_argument("--use-layer-norm", action="store_true", default=False)
     args = parser.parse_args()
     model_args = MODEL_CONFIGS[args.model_config]
+    model_args.use_layer_norm = args.use_layer_norm
     logger.info(f"Running benchmark with model config: {args.model_config}\n{model_args}")
     trainer_args = TrainerArgs(
         warmup_steps=args.warmup_steps,
