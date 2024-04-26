@@ -83,6 +83,7 @@ MODEL_CONFIGS = {
 
 
 def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW, enable_backward: bool, mixed_precision: bool = False) -> Tuple[float, float, float]:
+    forward_time, backward_time, optimizer_time = 0.0, 0.0, 0.0
     with record_function('forward_pass'):
         with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
             start = timeit.default_timer()
