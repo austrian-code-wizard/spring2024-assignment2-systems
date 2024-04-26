@@ -89,6 +89,7 @@ def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW,
         with record_function('backward_pass'):
             with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
                 loss = cross_entropy(out, inputs)
+                print(loss)
             loss.backward() 
         with record_function('optimizer'):
             optimizer.step()
