@@ -81,12 +81,14 @@ MODEL_CONFIGS = {
 }
 
 
-def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW, enable_backward: bool):
+def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW, enable_backward: bool, mixed_precision: bool = False):
     with record_function('forward_pass'):
-        out = model(inputs)
+        with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
+            out = model(inputs)
     if enable_backward:
         with record_function('backward_pass'):
-            loss = cross_entropy(out, inputs)
+            with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
+                loss = cross_entropy(out, inputs)
             loss.backward() 
         with record_function('optimizer'):
             optimizer.step()
@@ -125,10 +127,9 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
         profile_memory=False,
         with_stack=True,
     ) as prof:
-        with torch.autocast(device_type="cuda") if trainer_args.mixed_precision else nullcontext():
-            for _ in range(trainer_args.train_steps):
-                run_step(model, dummy_data, optimizer, trainer_args.run_backward)
-                prof.step()
+        for _ in range(trainer_args.train_steps):
+            run_step(model, dummy_data, optimizer, trainer_args.run_backward, mixed_precision=trainer_args.mixed_precision)
+            prof.step()
         torch.cuda.synchronize()
 
     prof.export_stacks("lm_profiler_stacks.txt", "self_cuda_time_total")
