@@ -79,7 +79,7 @@ MODEL_CONFIGS = {
 }
 
 
-def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW, enable_backward):
+def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW, enable_backward: bool):
     with record_function('forward_pass'):
         out = model(inputs)
     if enable_backward:
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     parser.add_argument("--run-backward", action="store_true", default=False)
     args = parser.parse_args()
     model_args = MODEL_CONFIGS[args.model_config]
-    logger.info(f"Running benchmark with model config: {args.model_config}")
+    logger.info(f"Running benchmark with model config: {args.model_config}\n{model_args}")
     trainer_args = TrainerArgs(
         warmup_steps=args.warmup_steps,
         train_steps=args.train_steps,
