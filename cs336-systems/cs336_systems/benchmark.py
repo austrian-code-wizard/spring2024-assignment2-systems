@@ -3,6 +3,7 @@ import timeit
 import logging
 import argparse
 import numpy as np
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Optional
 from cs336_basics.optimizer import AdamW
@@ -35,6 +36,7 @@ class TrainerArgs:
     warmup_steps: int = 1
     train_steps: int = 5
     run_backward: bool = True
+    mixed_precision: bool = False
 
 
 @dataclass
@@ -123,9 +125,10 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
         profile_memory=False,
         with_stack=True,
     ) as prof:
-        for _ in range(trainer_args.train_steps):
-            run_step(model, dummy_data, optimizer, trainer_args.run_backward)
-            prof.step()
+        with torch.autocast(device_type="cuda") if trainer_args.mixed_precision else nullcontext():
+            for _ in range(trainer_args.train_steps):
+                run_step(model, dummy_data, optimizer, trainer_args.run_backward)
+                prof.step()
         torch.cuda.synchronize()
 
     prof.export_stacks("lm_profiler_stacks.txt", "self_cuda_time_total")
@@ -142,6 +145,7 @@ if __name__ == "__main__":
     parser.add_argument("--warmup-steps", type=int, default=1)
     parser.add_argument("--train-steps", type=int, default=5)
     parser.add_argument("--run-backward", action="store_true", default=False)
+    parser.add_argument("--mixed-precision", action="store_true", default=False)
     args = parser.parse_args()
     model_args = MODEL_CONFIGS[args.model_config]
     logger.info(f"Running benchmark with model config: {args.model_config}\n{model_args}")
@@ -149,6 +153,7 @@ if __name__ == "__main__":
         warmup_steps=args.warmup_steps,
         train_steps=args.train_steps,
         run_backward=args.run_backward,
+        mixed_precision=args.mixed_precision,
     )
     optimizer_args = OptimizerArgs()
     logger.info(f"Trainer args: {trainer_args}")
