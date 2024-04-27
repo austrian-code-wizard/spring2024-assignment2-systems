@@ -88,6 +88,7 @@ def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW,
         with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
             start = timeit.default_timer()
             out = model(inputs)
+            torch.cuda.synchronize()
             forward_time = timeit.default_timer() - start
     if enable_backward:
         with record_function('backward_pass'):
@@ -95,11 +96,13 @@ def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW,
                 start = timeit.default_timer()
                 loss = cross_entropy(out, inputs)
             loss.backward() 
+            torch.cuda.synchronize()
             backward_time = timeit.default_timer() - start
         with record_function('optimizer'):
             start = timeit.default_timer()
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
+            torch.cuda.synchronize()
             optimizer_time = timeit.default_timer() - start
     return forward_time, backward_time, optimizer_time
 
