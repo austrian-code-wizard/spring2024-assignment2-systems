@@ -94,6 +94,7 @@ class BasicsTransformerLM(nn.Module):
         d_ff: int,
         attn_pdrop: Optional[float] = None,
         residual_pdrop: Optional[float] = None,
+        use_layernorm: bool = False,
     ):
         # Store the model configuration for serialization / deserialization
         self.config = {
@@ -114,6 +115,7 @@ class BasicsTransformerLM(nn.Module):
                     d_ff=d_ff,
                     attn_pdrop=attn_pdrop,
                     residual_pdrop=residual_pdrop,
+                    use_layernorm=use_layernorm,
                 )
                 for _ in range(num_layers)
             ]
@@ -287,6 +289,7 @@ class TransformerBlock(nn.Module):
         d_ff: int,
         attn_pdrop: Optional[float] = None,
         residual_pdrop: Optional[float] = None,
+        use_layernorm: bool = False,
     ):
         super().__init__()
         self.attn = CausalMultiHeadSelfAttention(
@@ -294,9 +297,9 @@ class TransformerBlock(nn.Module):
             num_heads=num_heads,
             attn_pdrop=attn_pdrop,
         )
-        self.ln1 = RMSNorm(d_model)
+        self.ln1 = RMSNorm(d_model) if not use_layernorm else nn.LayerNorm(d_model)
         self.ffn = FFN(d_model=d_model, d_ff=d_ff)
-        self.ln2 = RMSNorm(d_model)
+        self.ln2 = RMSNorm(d_model) if not use_layernorm else nn.LayerNorm(d_model)
         self.residual_pdrop = residual_pdrop
 
     def forward(self, x: torch.Tensor):
@@ -336,6 +339,8 @@ class FFN(nn.Module):
         x = self.w2(x)
         return x
 
+a = FFN(10, 20)
+a.w1.weight.grad
 
 def scaled_dot_product_attention(
     K: torch.FloatTensor,
