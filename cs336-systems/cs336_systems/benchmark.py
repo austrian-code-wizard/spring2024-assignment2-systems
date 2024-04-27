@@ -117,7 +117,7 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
         d_ff=model_args.d_ff,
         attn_pdrop=model_args.attn_pdrop,
         residual_pdrop=model_args.residual_pdrop,
-        use_layer_norm=model_args.use_layer_norm,
+        use_layernorm=model_args.use_layer_norm,
     ).to("cuda")
     optimizer = AdamW(model.parameters(), lr=optimizer_args.lr, betas=optimizer_args.betas, eps=optimizer_args.eps, weight_decay=optimizer_args.weight_decay)
     model.train()
