@@ -40,7 +40,7 @@ def rmsnorm_forward(
     weight = tl.load(weight_ptrs, mask=mask, other=0)
     norm_factor = tl.sqrt(tl.sum(row * row) + eps)
     output = row * weight / norm_factor
-    output_ptrs = output_ptr + row_idx * x_row_stride
+    output_ptrs = output_ptr + row_idx * x_row_stride + offsets
     tl.store(output_ptrs, output, mask=mask)
 
 
