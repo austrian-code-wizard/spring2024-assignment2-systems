@@ -129,7 +129,7 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
     ).to("cuda")
 
     for _ in range(trainer_args.warmup_steps):
-        run_step(model, dummy_data, AdamW(model.parameters()), True)
+        run_step(model, dummy_data, AdamW(model.parameters()), trainer_args.run_backward, mixed_precision=trainer_args.mixed_precision)
     torch.cuda.synchronize()
 
     with profile(
