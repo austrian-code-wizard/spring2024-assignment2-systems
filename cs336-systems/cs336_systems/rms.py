@@ -55,6 +55,7 @@ class RMSNormTriton(torch.autograd.Function):
         ctx.eps = eps
 
         H = x.shape[-1]
+        x_shape = x.shape
 
         x = x.view(-1, H)
 
@@ -76,7 +77,7 @@ class RMSNormTriton(torch.autograd.Function):
             num_warps=16,
             BLOCK_SIZE=ctx.BLOCK_SIZE
         )
-        return y
+        return y.view(*x_shape)
 
     @staticmethod
     def backward(ctx: Any, *grad_outputs: Any) -> Any:
