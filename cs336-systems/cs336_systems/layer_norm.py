@@ -1,4 +1,5 @@
 from cs336_basics.model import RMSNorm
+from cs336_systems.rms import RMSNormTriton
 import torch
 import time
 
@@ -36,6 +37,18 @@ def main():
             torch.cuda.synchronize()
         end = time.time()
         print(f"RMSNorm: {col} cols took {end - start} seconds")
+
+        # warmup
+        weight = torch.randn(col).to("cuda")
+        for _ in range(10):
+            RMSNormTriton.apply(data, weight)
+            torch.cuda.synchronize()
+        start = time.time()
+        for _ in range(ITERS):
+            RMSNormTriton.apply(data, weight)
+            torch.cuda.synchronize()
+        end = time.time()
+        print(f"RMSNormTriton: {col} cols took {end - start} seconds")
 
 
 if __name__ == "__main__":
