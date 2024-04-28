@@ -29,6 +29,7 @@ class ModelArgs:
     attn_pdrop: Optional[float] = 0.1
     residual_pdrop: Optional[float] = 0.05
     use_layer_norm: Optional[bool] = False
+    use_triton_rmsnorm: Optional[bool] = False
 
 
 @dataclass
@@ -118,6 +119,7 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
         attn_pdrop=model_args.attn_pdrop,
         residual_pdrop=model_args.residual_pdrop,
         use_layernorm=model_args.use_layer_norm,
+        use_triton_rmsnorm=model_args.use_triton_rmsnorm,
     ).to("cuda")
     optimizer = AdamW(model.parameters(), lr=optimizer_args.lr, betas=optimizer_args.betas, eps=optimizer_args.eps, weight_decay=optimizer_args.weight_decay)
     model.train()
@@ -169,9 +171,11 @@ if __name__ == "__main__":
     parser.add_argument("--run-backward", action="store_true", default=False)
     parser.add_argument("--mixed-precision", action="store_true", default=False)
     parser.add_argument("--use-layer-norm", action="store_true", default=False)
+    parser.add_argument("--use-triton-rmsnorm", action="store_true", default=False)
     args = parser.parse_args()
     model_args = MODEL_CONFIGS[args.model_config]
     model_args.use_layer_norm = args.use_layer_norm
+    model_args.use_triton_rmsnorm = args.use_triton_rmsnorm
     logger.info(f"Running benchmark with model config: {args.model_config}\n{model_args}")
     trainer_args = TrainerArgs(
         warmup_steps=args.warmup_steps,
