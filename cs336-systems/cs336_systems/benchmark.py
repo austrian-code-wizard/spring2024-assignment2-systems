@@ -91,7 +91,6 @@ def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW,
             out = model(inputs)
             torch.cuda.synchronize()
             forward_time = timeit.default_timer() - start
-    print(f"Enable backward: {enable_backward}")
     if enable_backward:
         with record_function('backward_pass'):
             with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():

@@ -55,7 +55,8 @@ def rmsnorm_backward_g_pytorch(
     Returns:
         Gradient of the loss with respect to g. Shape: (H,)
     """
-    raise NotImplementedError
+    from cs336_systems.rms import rmsnorm_grad_weight
+    return rmsnorm_grad_weight(x, g, grad_output, 1e-5)
 
 
 def rmsnorm_backward_x_pytorch(

@@ -4,6 +4,16 @@ import triton
 import triton.language as tl
 
 
+def rmsnorm_grad_weight(x, weight, grad_out, eps):
+    """
+    x: ... x H
+    weight: H
+    grad_out: ... x H
+    """
+    norm = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + eps)
+    grad_weight = torch.sum(x * grad_out / norm, dim=x.shape[:-1])
+    return grad_weight
+
 class RMSNorm(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, eps=1e-5):
@@ -16,8 +26,8 @@ class RMSNorm(torch.autograd.Function):
         return x * weight.view(1, -1) / torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + eps)
 
     @staticmethod
-    def backward(ctx: Any, *grad_outputs: Any) -> Any:
-        raise NotImplementedError("RMSNorm backward not implemented")
+    def backward(ctx, grad_out):
+        pass
 
 
 @triton.jit
