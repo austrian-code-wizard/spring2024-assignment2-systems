@@ -37,7 +37,7 @@ class TrainerArgs:
     batch_size: int = 16
     warmup_steps: int = 1
     train_steps: int = 5
-    run_backward: bool = True
+    run_backward: bool = False
     mixed_precision: bool = False
 
 
