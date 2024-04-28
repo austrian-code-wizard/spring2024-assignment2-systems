@@ -16,6 +16,19 @@ def rmsnorm_grad_weight(x, weight, grad_out, eps):
     grad_weight = torch.sum(x * grad_out / norm, dim=0)
     return grad_weight
 
+
+def rmsnorm_grad_x(x, weight, grad_out, eps):
+    """
+    x: ... x H
+    weight: H
+    grad_out: ... x H
+    """
+    x = x.view(-1, x.shape[-1])
+    grad_out = grad_out.view(-1, grad_out.shape[-1])
+    norm = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + eps)
+    grad_x = grad_out * weight / norm - x * torch.sum(grad_out * x, dim=-1, keepdim=True) / (norm ** 3)
+    return grad_x.view(*x.shape)
+
 class RMSNorm(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, eps=1e-5):

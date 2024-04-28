@@ -77,7 +77,8 @@ def rmsnorm_backward_x_pytorch(
     Returns:
         Gradient of the loss with respect to x. Shape: (*, H)
     """
-    raise NotImplementedError
+    from cs336_systems.rms import rmsnorm_grad_x
+    return rmsnorm_grad_x(x, g, grad_output, 1e-5)
 
 
 def get_ddp_individual_parameters(module: torch.nn.Module) -> torch.nn.Module:
