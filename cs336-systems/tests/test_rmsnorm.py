@@ -53,6 +53,8 @@ def test_rmsnorm_backward_x_pytorch():
     _rmsnorm(x, g).backward(dy)
     x_grad_pred = rmsnorm_backward_x_pytorch(dy, x, g)
 
+    print(f"x_grad_pred: {x_grad_pred}")
+    print(f"x.grad: {x.grad}")
     assert torch.allclose(x_grad_pred, x.grad, rtol=1e-4, atol=1e-5), (
         x_grad_pred,
         x.grad,
