@@ -23,11 +23,17 @@ def rmsnorm_grad_x(x, weight, grad_out, eps):
     weight: H
     grad_out: ... x H
     """
+
+    """
+    Approach:
+    - 
+    """
+
     x_shape = x.shape
     x = x.view(-1, x.shape[-1])
     grad_out = grad_out.view(-1, grad_out.shape[-1])
     norm = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + eps)
-    base_grad = grad_out / x_shape[-1] * -0.5 * x * weight.view(1, -1) / norm ** 3
+    base_grad = grad_out / x_shape[-1] * -1.0 * x * weight.view(1, -1) / norm ** 3
     base_grad = base_grad.sum(dim=-1, keepdim=True)
     extra_grad = grad_out * weight.view(1, -1) / norm
     return (base_grad + extra_grad).view(*x_shape)
