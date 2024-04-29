@@ -27,9 +27,10 @@ def rmsnorm_grad_x(x, weight, grad_out, eps):
     x = x.view(-1, x.shape[-1])
     grad_out = grad_out.view(-1, grad_out.shape[-1])
     norm = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + eps)
-    grad_x = (grad_out / norm) - ((x * torch.sum(x * grad_out, dim=-1, keepdim=True)) / (norm ** 3))
-    grad_x = grad_x * weight.unsqueeze(0)
-    return grad_x.view(*x_shape)
+    base_grad = grad_out * -0.5 * x * weight.view(1, -1) / norm ** 3
+    base_grad = base_grad.sum(dim=-1, keepdim=True)
+    extra_grad = grad_out * weight.view(1, -1) / norm
+    return base_grad + extra_grad
 
 class RMSNorm(torch.autograd.Function):
     @staticmethod
