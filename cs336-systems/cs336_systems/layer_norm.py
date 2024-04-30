@@ -12,7 +12,7 @@ COLS = [1024, 2048, 4096, 8192]
 def main(run_backward: bool = False):
     for col in COLS:
         data = torch.randn(ROWS, col).to("cuda")
-
+        result = torch.randn(ROWS, col).to("cuda")
         layer_norm = torch.nn.LayerNorm(col).to("cuda")
         rms_norm = RMSNorm(col).to("cuda")
 
@@ -29,12 +29,13 @@ def main(run_backward: bool = False):
             forward.append(time.time() - start)
             if run_backward:
                 start = time.time()
-                output.sum().backward()
+                output.backward(result)
                 torch.cuda.synchronize()
                 backward.append(time.time() - start)
-        print(f"LayerNorm: {col} cols took {sum(forward) / ITERS} seconds")
+                data.grad = None
+        print(f"LayerNorm: {col} cols took {sum(forward)} seconds")
         if run_backward:
-            print(f"LayerNorm backward: {col} cols took {sum(backward) / ITERS} seconds")
+            print(f"LayerNorm backward: {col} cols took {sum(backward)} seconds")
 
         # warmup
         for _ in range(10):
@@ -49,12 +50,13 @@ def main(run_backward: bool = False):
             forward_rms.append(time.time() - start_rms)
             if run_backward:
                 start_rms = time.time()
-                output.sum().backward()
+                output.backward(result)
                 torch.cuda.synchronize()
                 backward_rms.append(time.time() - start_rms)
-        print(f"RMSNorm: {col} cols took {sum(forward_rms) / ITERS} seconds")
+                data.grad = None
+        print(f"RMSNorm: {col} cols took {sum(forward_rms)} seconds")
         if run_backward:
-            print(f"RMSNorm backward: {col} cols took {sum(backward_rms) / ITERS} seconds")
+            print(f"RMSNorm backward: {col} cols took {sum(backward_rms)} seconds")
 
         triton_norm = RMSNormTriton(col).to("cuda")
         # warmup
@@ -66,16 +68,17 @@ def main(run_backward: bool = False):
         for _ in range(ITERS):
             start_triton = time.time()
             output = triton_norm(data)
-            torch.cuda.synchronize()
+            #torch.cuda.synchronize()
             forward_triton.append(time.time() - start_triton)
             if run_backward:
                 start_triton = time.time()
-                output.sum().backward()
+                output.backward(result)
                 torch.cuda.synchronize()
                 backward_triton.append(time.time() - start_triton)
-        print(f"RMSNormTriton: {col} cols took {sum(forward_triton) / ITERS} seconds")
+                data.grad = None
+        print(f"RMSNormTriton: {col} cols took {sum(forward_triton)} seconds")
         if run_backward:
-            print(f"RMSNormTriton backward: {col} cols took {sum(backward_triton) / ITERS} seconds")
+            print(f"RMSNormTriton backward: {col} cols took {sum(backward_triton)} seconds")
 
 
 if __name__ == "__main__":
