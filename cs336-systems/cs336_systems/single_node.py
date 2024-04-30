@@ -58,7 +58,7 @@ def benchmark_all_reduce(
     if rank == 0:
         avg_time = sum(all_times) / world_size
         logger.debug(
-            f"Backend: {backend}, Device: {device}, Tensor size: {tensor_size_str}, Average Time taken: {avg_time} seconds"
+            f"Backend: {backend}, Device: {device}, World size: {world_size}, Tensor size: {tensor_size_str}, Average Time taken: {avg_time} seconds"
         )
 
 
