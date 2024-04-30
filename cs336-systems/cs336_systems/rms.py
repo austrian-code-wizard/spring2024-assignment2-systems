@@ -16,6 +16,14 @@ def rmsnorm_grad_weight(x, weight, grad_out, eps):
     grad_weight = torch.sum(x * grad_out / norm, dim=0)
     return grad_weight
 
+import torch
+
+def rmsnorm(X, g, epsilon=1e-6):
+    d_model = X.size(1)
+    norm_squared = X.pow(2).sum(dim=1, keepdim=True) / d_model
+    sigma = torch.sqrt(norm_squared + epsilon)
+    Y = X * g / sigma
+    return Y, sigma
 
 def rmsnorm_grad_x(x, weight, grad_out, eps):
     """
@@ -32,10 +40,17 @@ def rmsnorm_grad_x(x, weight, grad_out, eps):
     x_shape = x.shape
     x = x.view(-1, x.shape[-1])
     grad_out = grad_out.view(-1, grad_out.shape[-1])
-    norm = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + eps)
-    base_grad = grad_out * weight.view(1, -1) / norm
-    extra_grad = -1.0 * x @ (grad_out * x) / (x_shape[-1] * norm ** 3)
-    return (base_grad + extra_grad).view(*x_shape)
+    sigma = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + eps)
+    d_model = x.size(1)
+    sigma_sq = sigma.pow(2)
+    sigma_cub = sigma.pow(3)
+    grad_diag = g / sigma * (1 - x.pow(2) / (d_model * sigma_sq))
+    grad_diag = grad_diag * grad_out
+    X_term = (x / (d_model * sigma_cub)).unsqueeze(2) 
+    g_term = (weight * grad_out).unsqueeze(1) 
+    grad_off_diag = -torch.bmm(X_term, g_term * x.unsqueeze(1))
+    grad_X = grad_diag + grad_off_diag.sum(dim=2)
+    return grad_X.view(*x_shape)
 
 class RMSNorm(torch.autograd.Function):
     @staticmethod
