@@ -22,19 +22,14 @@ def rmsnorm_grad_x(x, weight, grad_out, eps):
     weight: H
     grad_out: ... x H
     """
-
-    """
-    Approach:
-    - 
-    """
-
     x_shape = x.shape
+    H = x_shape[-1]
     x = x.view(-1, x.shape[-1])
     grad_out = grad_out.view(-1, grad_out.shape[-1])
     norm = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + eps)
 
     numerator = x * grad_out * weight.view(1, -1)
-    second_term = torch.sum(numerator, dim=-1, keepdim=True) * x  / (x_shape[-1] * norm ** 3)
+    second_term = torch.sum(numerator, dim=-1, keepdim=True) * x  / (H * norm ** 3)
 
     first_term = grad_out * weight.view(1, -1) / norm
     return (first_term - second_term).view(*x_shape)
@@ -52,7 +47,9 @@ class RMSNorm(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_out):
-        pass
+        x, weight = ctx.saved_tensors
+        eps = ctx.eps
+        return rmsnorm_grad_x(x, weight, grad_out, eps), rmsnorm_grad_weight(x, weight, grad_out, eps), None
 
 
 @triton.jit
