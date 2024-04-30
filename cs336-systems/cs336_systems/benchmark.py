@@ -174,7 +174,7 @@ def main(
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
             ],
-            schedule=torch.profiler.schedule(wait=0, warmup=0, active=1, repeat=n_steps) if profile_memory else None,
+            #schedule=torch.profiler.schedule(wait=0, warmup=0, active=1, repeat=n_steps) if profile_memory else None,
             experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True),
             record_shapes=True,
             profile_memory=profile_memory,
