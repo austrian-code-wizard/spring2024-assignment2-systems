@@ -17,6 +17,8 @@ logging.basicConfig(format="%(asctime)s (%(levelname)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+DEVICE = "cuda:0"
+
 
 @dataclass
 class ModelArgs:
@@ -94,7 +96,7 @@ def run_step(
 ) -> Tuple[float, float, float]:
     forward_time, backward_time, optimizer_time = 0.0, 0.0, 0.0
     with record_function("forward_pass") if profile else nullcontext():
-        with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
+        with torch.autocast(device_type=DEVICE) if mixed_precision else nullcontext():
             start = timeit.default_timer()
             out = model(inputs)
             torch.cuda.synchronize()
@@ -102,7 +104,7 @@ def run_step(
     if enable_backward:
         with record_function("backward_pass") if profile else nullcontext():
             with (
-                torch.autocast(device_type="cuda") if mixed_precision else nullcontext()
+                torch.autocast(device_type=DEVICE) if mixed_precision else nullcontext()
             ):
                 start = timeit.default_timer()
                 loss = cross_entropy(out, inputs)
@@ -116,6 +118,11 @@ def run_step(
             torch.cuda.synchronize()
             optimizer_time = timeit.default_timer() - start
     return forward_time, backward_time, optimizer_time
+
+
+def trace_handler(prof: torch.profiler.profile):
+   # Construct the memory timeline file.
+   prof.export_memory_timeline("timeline.html", device=DEVICE)
 
 
 def main(
@@ -138,7 +145,7 @@ def main(
         residual_pdrop=model_args.residual_pdrop,
         use_layernorm=model_args.use_layer_norm,
         use_triton_rmsnorm=model_args.use_triton_rmsnorm,
-    ).to("cuda")
+    ).to(DEVICE)
     if trainer_args.compile:
         model = torch.compile(model)
     optimizer = AdamW(
@@ -151,7 +158,7 @@ def main(
     model.train()
     dummy_data = torch.randint(
         0, model_args.vocab_size, (trainer_args.batch_size, model_args.context_length)
-    ).to("cuda")
+    ).to(DEVICE)
 
     for _ in range(trainer_args.warmup_steps):
         run_step(
@@ -166,7 +173,6 @@ def main(
 
     if profile_memory:
         torch.cuda.memory._record_memory_history(max_entries=1000000)
-        n_steps = trainer_args.train_steps
 
     with (
         profile(
@@ -174,11 +180,12 @@ def main(
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
             ],
-            schedule=torch.profiler.schedule(wait=0, warmup=0, active=1, repeat=n_steps) if profile_memory else None,
+            schedule=torch.profiler.schedule(wait=0, warmup=0, active=1, repeat=trainer_args.train_steps) if profile_memory else None,
             experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True),
             record_shapes=True,
             profile_memory=profile_memory,
             with_stack=True,
+            on_trace_ready=trace_handler if profile_memory else None,
         )
         if do_profile
         else nullcontext()
@@ -187,6 +194,8 @@ def main(
         backward_times = []
         optimizer_times = []
         for _ in range(trainer_args.train_steps):
+            if do_profile:
+                prof.step()
             f, b, o = run_step(
                 model,
                 dummy_data,
@@ -198,12 +207,9 @@ def main(
             forward_times.append(f)
             backward_times.append(b)
             optimizer_times.append(o)
-            if do_profile:
-                prof.step()
         torch.cuda.synchronize()
-        if profile_memory:
-            pass
-            #prof.export_memory_timeline("timeline.html", device="cuda")
+        #if profile_memory:
+        #    prof.export_memory_timeline("timeline.html", device=DEVICE)
     print(f"Forward time: {np.mean(forward_times):.4f} s")
     print(f"Backward time: {np.mean(backward_times):.4f} s")
     print(f"Optimizer time: {np.mean(optimizer_times):.4f} s")
