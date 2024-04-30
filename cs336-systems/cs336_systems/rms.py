@@ -90,9 +90,10 @@ def rmsnorm_backward(
 ):
     row_idx = tl.program_id(0)
     offsets = tl.arange(0, BLOCK_SIZE)
-    x_ptrs = x_ptr + row_idx * x_row_stride + offsets
+    access_range = row_idx * x_row_stride + offsets
+    x_ptrs = x_ptr + access_range
     weight_ptrs = weight_ptr + offsets
-    grad_out_ptrs = grad_out_ptr + row_idx * x_row_stride + offsets
+    grad_out_ptrs = grad_out_ptr + access_range
     mask = offsets < H
     row = tl.load(x_ptrs, mask=mask, other=0)
     weight = tl.load(weight_ptrs, mask=mask, other=0)
@@ -101,13 +102,13 @@ def rmsnorm_backward(
 
     # Compute partial gradient w.r.t. weight
     grad_w_accum = row * grad_out / norm_factor
-    tl.store(grad_w_accum_ptr + row_idx * x_row_stride + offsets, grad_w_accum, mask=mask)
+    tl.store(grad_w_accum_ptr + access_range, grad_w_accum, mask=mask)
 
     # Compute partial gradient w.r.t. x
     first_term = grad_out * weight / norm_factor
     second_term = tl.sum(row * grad_out * weight) * row / (H * norm_factor * norm_factor * norm_factor)
     grad_x = first_term - second_term
-    tl.store(grad_x_ptr + row_idx * x_row_stride + offsets, grad_x, mask=mask)
+    tl.store(grad_x_ptr + access_range, grad_x, mask=mask)
 
 
 class RMSNormTritonFunc(torch.autograd.Function):
@@ -146,7 +147,7 @@ class RMSNormTritonFunc(torch.autograd.Function):
         return y.view(*x_shape)
 
     @staticmethod
-    def backward(ctx: Any, *grad_outputs: Any) -> Any:
+    def backward(ctx: Any, grad_out) -> Any:
         x, weight = ctx.saved_tensors
         eps = ctx.eps
 
@@ -163,7 +164,7 @@ class RMSNormTritonFunc(torch.autograd.Function):
         rmsnorm_backward[(n_rows,)](
             x,
             weight,
-            grad_outputs[0],
+            grad_out,
             x.stride(0),
             grad_x,
             partial_grad_weight,
