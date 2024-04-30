@@ -18,7 +18,7 @@ logging.basicConfig(format="%(asctime)s (%(levelname)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-DEVICE = "cuda:0"
+DEVICE = "cuda"
 
 
 @dataclass
