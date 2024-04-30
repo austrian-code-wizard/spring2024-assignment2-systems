@@ -18,7 +18,7 @@ logging.basicConfig(format="%(asctime)s (%(levelname)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-DEVICE = "cuda"
+DEVICE = "cuda:0"
 
 
 @dataclass
@@ -98,7 +98,7 @@ def run_step(
 ) -> Tuple[float, float, float]:
     forward_time, backward_time, optimizer_time = 0.0, 0.0, 0.0
     with record_function("forward_pass") if profile else nullcontext():
-        with torch.autocast(device_type=DEVICE) if mixed_precision else nullcontext():
+        with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
             start = timeit.default_timer()
             out = model(inputs)
             torch.cuda.synchronize()
@@ -106,7 +106,7 @@ def run_step(
     if enable_backward:
         with record_function("backward_pass") if profile else nullcontext():
             with (
-                torch.autocast(device_type=DEVICE) if mixed_precision else nullcontext()
+                torch.autocast(device_type="cuda") if mixed_precision else nullcontext()
             ):
                 start = timeit.default_timer()
                 loss = cross_entropy(out, inputs)
