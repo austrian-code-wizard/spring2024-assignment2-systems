@@ -33,9 +33,10 @@ def main(run_backward: bool = False):
                 torch.cuda.synchronize()
                 backward.append(time.time() - start)
                 data.grad = None
-        print(f"LayerNorm: {col} cols took {sum(forward)} seconds")
+        print(f"LayerNorm: {col} cols took {sum(forward) / ITERS} seconds")
         if run_backward:
-            print(f"LayerNorm backward: {col} cols took {sum(backward)} seconds")
+            print(f"LayerNorm backward: {col} cols took {sum(backward) / ITERS} seconds")
+            print(f"Combined average time for LayerNorm (forward + backward): {sum([f+b for f, b in zip(forward, backward)]) / ITERS} seconds")
 
         # warmup
         for _ in range(10):
@@ -54,9 +55,10 @@ def main(run_backward: bool = False):
                 torch.cuda.synchronize()
                 backward_rms.append(time.time() - start_rms)
                 data.grad = None
-        print(f"RMSNorm: {col} cols took {sum(forward_rms)} seconds")
+        print(f"RMSNorm: {col} cols took {sum(forward_rms) / ITERS} seconds")
         if run_backward:
-            print(f"RMSNorm backward: {col} cols took {sum(backward_rms)} seconds")
+            print(f"RMSNorm backward: {col} cols took {sum(backward_rms) / ITERS} seconds")
+            print(f"Combined average time for RMSNorm (forward + backward): {sum([f+b for f, b in zip(forward_rms, backward_rms)]) / ITERS} seconds")
 
         triton_norm = RMSNormTriton(col).to("cuda")
         # warmup
@@ -76,10 +78,10 @@ def main(run_backward: bool = False):
                 torch.cuda.synchronize()
                 backward_triton.append(time.time() - start_triton)
                 data.grad = None
-        print(f"RMSNormTriton: {col} cols took {sum(forward_triton)} seconds")
+        print(f"RMSNormTriton: {col} cols took {sum(forward_triton) / ITERS} seconds")
         if run_backward:
-            print(f"RMSNormTriton backward: {col} cols took {sum(backward_triton)} seconds")
-
+            print(f"RMSNormTriton backward: {col} cols took {sum(backward_triton) / ITERS} seconds")
+            print(f"Combined average time for RMSNormTriton (forward + backward): {sum([f+b for f, b in zip(forward_triton, backward_triton)]) / ITERS} seconds")
 
 if __name__ == "__main__":
     main(run_backward=True)
