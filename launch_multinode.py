@@ -3,8 +3,7 @@ import argparse
 import tempfile
 import os
 
-job_script = """
-#!/bin/bash
+job_script = """#!/bin/bash
 #SBATCH --cpus-per-task=4
 #SBATCH --ntasks-per-node={nprocs}
 #SBATCH --nodes=2
