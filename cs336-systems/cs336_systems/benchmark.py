@@ -40,7 +40,6 @@ class TrainerArgs:
     run_backward: bool = False
     mixed_precision: bool = False
     compile: bool = False
-    no_profile: bool = False
 
 @dataclass
 class OptimizerArgs:
@@ -152,14 +151,16 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
             forward_times.append(f)
             backward_times.append(b)
             optimizer_times.append(o)
-            prof.step()
+            if profile:
+                prof.step()
         torch.cuda.synchronize()
     print(f"Forward time: {np.mean(forward_times):.4f} s")
     print(f"Backward time: {np.mean(backward_times):.4f} s")
     print(f"Optimizer time: {np.mean(optimizer_times):.4f} s")
 
-    prof.export_stacks("lm_profiler_stacks.txt", "self_cuda_time_total")
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=50))
+    if profile:
+        prof.export_stacks("lm_profiler_stacks.txt", "self_cuda_time_total")
+        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=50))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
