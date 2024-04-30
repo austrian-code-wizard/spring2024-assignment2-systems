@@ -70,7 +70,7 @@ def main(run_backward: bool = False):
         for _ in range(ITERS):
             start_triton = time.time()
             output = triton_norm(data)
-            #torch.cuda.synchronize()
+            torch.cuda.synchronize()
             forward_triton.append(time.time() - start_triton)
             if run_backward:
                 start_triton = time.time()
