@@ -41,7 +41,7 @@ def benchmark_all_reduce(
     )
 
     # Warmup steps
-    data = torch.randn(tensor_size, device=device)
+    data = torch.randn(tensor_size, device=device).to(torch.float32)
     for _ in range(5):
         dist.all_reduce(data, async_op=False)
         if device.type == "cuda":
@@ -50,9 +50,9 @@ def benchmark_all_reduce(
     start_time = time.time()
     dist.all_reduce(data, async_op=False)
     if device.type == "cuda":
-        torch.cuda.synchronize()  # Ensure completion of CUDA operations
+        torch.cuda.synchronize()
     total_time = time.time() - start_time
-    # Collect total_time from all ranks
+
     all_times = [None] * world_size
     dist.all_gather_object(all_times, total_time)
     if rank == 0:
