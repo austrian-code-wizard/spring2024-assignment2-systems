@@ -200,9 +200,10 @@ def main(
             optimizer_times.append(o)
             if do_profile:
                 prof.step()
-        #torch.cuda.synchronize()
+        torch.cuda.synchronize()
         if profile_memory:
-            prof.export_memory_timeline("timeline.html", device="cuda")
+            pass
+            #prof.export_memory_timeline("timeline.html", device="cuda")
     print(f"Forward time: {np.mean(forward_times):.4f} s")
     print(f"Backward time: {np.mean(backward_times):.4f} s")
     print(f"Optimizer time: {np.mean(optimizer_times):.4f} s")
