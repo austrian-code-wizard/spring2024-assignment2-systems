@@ -37,7 +37,7 @@ def rmsnorm_grad_x(x, weight, grad_out, eps):
     second_term = torch.sum(numerator, dim=-1, keepdim=True) * x  / (x_shape[-1] * norm ** 3)
 
     first_term = grad_out * weight.view(1, -1) / norm
-    return (first_term - x * second_term.view(-1, 1)).view(*x_shape)
+    return (first_term - second_term).view(*x_shape)
 
 class RMSNorm(torch.autograd.Function):
     @staticmethod
