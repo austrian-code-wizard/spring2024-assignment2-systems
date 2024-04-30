@@ -11,6 +11,8 @@ job_script = """#!/bin/bash
 #SBATCH --mem=8G
 #SBATCH --time=00:02:00
 #SBATCH --gpus-per-node={nprocs}
+#SBATCH --output=sbatch/{name}.out
+#SBATCH --error=sbatch/{name}.err
 
 eval "$(conda shell.bash hook)"
 # Change conda environment name, if necessary
@@ -42,8 +44,9 @@ def launch_slurm_jobs(backend, use_cuda, processes_per_node):
 
     for tensor_size in TENSOR_SIZES:
         for nprocs in processes_per_node:
+            name = f"{backend}_{tensor_size}_{nprocs}_{use_cuda}"
             with open("tmp.sh", "w+") as tmpfile:
-                job_script_formatted = job_script.format(nprocs=nprocs, backend=backend, tensor_size=tensor_size, use_cuda=use_cuda_flag)
+                job_script_formatted = job_script.format(nprocs=nprocs, backend=backend, tensor_size=tensor_size, use_cuda=use_cuda_flag, name=name)
                 tmpfile.write(job_script_formatted)
 
             cmd = [
