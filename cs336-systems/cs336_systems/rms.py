@@ -33,10 +33,9 @@ def rmsnorm_grad_x(x, weight, grad_out, eps):
     grad_out = grad_out.view(-1, grad_out.shape[-1])
     norm = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + eps)
 
-    numerator =x * grad_out * weight.view(1, -1)
-    denominator = x_shape[-1] * norm ** 3
+    numerator = x * grad_out * weight.view(1, -1) / (x_shape[-1] * norm ** 3)
+    second_term = torch.bmm(numerator.view(*x_shape, -1), x.view(*x_shape, 1)).sum(dim=-1)
 
-    second_term = torch.einsum("ij, ik -> i", numerator, x) / denominator
     first_term = grad_out * weight.view(1, -1) / norm
     return (first_term - x * second_term.view(-1, 1)).view(*x_shape)
 
