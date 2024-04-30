@@ -3,6 +3,7 @@ import timeit
 import logging
 import argparse
 import numpy as np
+from tqdm import tqdm
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -120,11 +121,6 @@ def run_step(
     return forward_time, backward_time, optimizer_time
 
 
-def trace_handler(prof: torch.profiler.profile):
-   # Construct the memory timeline file.
-   prof.export_memory_timeline("timeline.html", device=DEVICE)
-
-
 def main(
     model_args: ModelArgs,
     trainer_args: TrainerArgs,
@@ -185,7 +181,6 @@ def main(
             record_shapes=True,
             profile_memory=profile_memory,
             with_stack=True,
-            on_trace_ready=trace_handler if profile_memory else None,
         )
         if do_profile
         else nullcontext()
@@ -193,7 +188,7 @@ def main(
         forward_times = []
         backward_times = []
         optimizer_times = []
-        for _ in range(trainer_args.train_steps):
+        for _ in tqdm(range(trainer_args.train_steps)):
             if do_profile:
                 prof.step()
             f, b, o = run_step(
@@ -208,8 +203,8 @@ def main(
             backward_times.append(b)
             optimizer_times.append(o)
         torch.cuda.synchronize()
-        #if profile_memory:
-        #    prof.export_memory_timeline("timeline.html", device=DEVICE)
+        if profile_memory:
+            prof.export_memory_timeline("timeline.html", device=DEVICE)
     print(f"Forward time: {np.mean(forward_times):.4f} s")
     print(f"Backward time: {np.mean(backward_times):.4f} s")
     print(f"Optimizer time: {np.mean(optimizer_times):.4f} s")
