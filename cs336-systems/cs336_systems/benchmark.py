@@ -174,7 +174,7 @@ def main(
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
             ],
-            #schedule=torch.profiler.schedule(wait=0, warmup=0, active=1, repeat=n_steps) if profile_memory else None,
+            schedule=torch.profiler.schedule(wait=0, warmup=0, active=1, repeat=n_steps) if profile_memory else None,
             experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True),
             record_shapes=True,
             profile_memory=profile_memory,
@@ -200,7 +200,7 @@ def main(
             optimizer_times.append(o)
             if do_profile:
                 prof.step()
-        torch.cuda.synchronize()
+        #torch.cuda.synchronize()
         if profile_memory:
             prof.export_memory_timeline("timeline.html", device="cuda")
     print(f"Forward time: {np.mean(forward_times):.4f} s")
