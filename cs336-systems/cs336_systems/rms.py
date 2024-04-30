@@ -110,7 +110,7 @@ def rmsnorm_backward(
     tl.store(grad_x_ptr + row_idx * x_row_stride + offsets, grad_x, mask=mask)
 
 
-class RMSNormTriton(torch.autograd.Function):
+class RMSNormTritonFunc(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, eps=1e-5):
         """
@@ -173,3 +173,16 @@ class RMSNormTriton(torch.autograd.Function):
             BLOCK_SIZE=ctx.BLOCK_SIZE
         )
         return grad_x.view(*x_shape), partial_grad_weight.sum(dim=0)
+    
+
+class RMSNormTriton(torch.nn.Module):
+    def __init__(self, H):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.randn(H))
+
+    def forward(self, x):
+        return RMSNormTritonFunc.apply(x, self.weight)
+
+    @staticmethod
+    def apply(x, weight, eps=1e-5):
+        return RMSNormTritonFunc.apply(x, weight, eps)
