@@ -44,7 +44,7 @@ def rmsnorm_grad_x(x, weight, grad_out, eps):
     d_model = x.size(1)
     sigma_sq = sigma.pow(2)
     sigma_cub = sigma.pow(3)
-    grad_diag = g / sigma * (1 - x.pow(2) / (d_model * sigma_sq))
+    grad_diag = grad_out / sigma * (1 - x.pow(2) / (d_model * sigma_sq))
     grad_diag = grad_diag * grad_out
     X_term = (x / (d_model * sigma_cub)).unsqueeze(2) 
     g_term = (weight * grad_out).unsqueeze(1) 
