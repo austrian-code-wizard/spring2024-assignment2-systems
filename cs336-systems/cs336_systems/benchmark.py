@@ -41,6 +41,7 @@ class TrainerArgs:
     mixed_precision: bool = False
     compile: bool = False
 
+
 @dataclass
 class OptimizerArgs:
     lr: float = 1e-4
@@ -83,23 +84,32 @@ MODEL_CONFIGS = {
 }
 
 
-def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW, enable_backward: bool, mixed_precision: bool = False, profile: bool = True) -> Tuple[float, float, float]:
+def run_step(
+    model: BasicsTransformerLM,
+    inputs: torch.Tensor,
+    optimizer: AdamW,
+    enable_backward: bool,
+    mixed_precision: bool = False,
+    profile: bool = True,
+) -> Tuple[float, float, float]:
     forward_time, backward_time, optimizer_time = 0.0, 0.0, 0.0
-    with record_function('forward_pass') if profile else nullcontext():
+    with record_function("forward_pass") if profile else nullcontext():
         with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
             start = timeit.default_timer()
             out = model(inputs)
             torch.cuda.synchronize()
             forward_time = timeit.default_timer() - start
     if enable_backward:
-        with record_function('backward_pass') if profile else nullcontext():
-            with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
+        with record_function("backward_pass") if profile else nullcontext():
+            with (
+                torch.autocast(device_type="cuda") if mixed_precision else nullcontext()
+            ):
                 start = timeit.default_timer()
                 loss = cross_entropy(out, inputs)
-            loss.backward() 
+            loss.backward()
             torch.cuda.synchronize()
             backward_time = timeit.default_timer() - start
-        with record_function('optimizer') if profile else nullcontext():
+        with record_function("optimizer") if profile else nullcontext():
             start = timeit.default_timer()
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
@@ -108,7 +118,13 @@ def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW,
     return forward_time, backward_time, optimizer_time
 
 
-def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: OptimizerArgs, profile: bool = True):
+def main(
+    model_args: ModelArgs,
+    trainer_args: TrainerArgs,
+    optimizer_args: OptimizerArgs,
+    profile: bool = True,
+    profile_memory: bool = False,
+):
     model = BasicsTransformerLM(
         vocab_size=model_args.vocab_size,
         context_length=model_args.context_length,
@@ -123,37 +139,67 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
     ).to("cuda")
     if trainer_args.compile:
         model = torch.compile(model)
-    optimizer = AdamW(model.parameters(), lr=optimizer_args.lr, betas=optimizer_args.betas, eps=optimizer_args.eps, weight_decay=optimizer_args.weight_decay)
+    optimizer = AdamW(
+        model.parameters(),
+        lr=optimizer_args.lr,
+        betas=optimizer_args.betas,
+        eps=optimizer_args.eps,
+        weight_decay=optimizer_args.weight_decay,
+    )
     model.train()
     dummy_data = torch.randint(
         0, model_args.vocab_size, (trainer_args.batch_size, model_args.context_length)
     ).to("cuda")
 
     for _ in range(trainer_args.warmup_steps):
-        run_step(model, dummy_data, AdamW(model.parameters()), trainer_args.run_backward, mixed_precision=trainer_args.mixed_precision, profile=False)
+        run_step(
+            model,
+            dummy_data,
+            AdamW(model.parameters()),
+            trainer_args.run_backward,
+            mixed_precision=trainer_args.mixed_precision,
+            profile=False,
+        )
     torch.cuda.synchronize()
 
-    with profile(
-        activities=[
-            torch.profiler.ProfilerActivity.CPU,
-            torch.profiler.ProfilerActivity.CUDA,
-        ],
-        experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True),
-        record_shapes=True,
-        profile_memory=False,
-        with_stack=True,
-    ) if profile else nullcontext() as prof:
+    if profile_memory:
+        torch.cuda.memory._record_memory_history(max_entries=1000000)
+        n_steps = 3
+
+    with (
+        profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            schedule=torch.profiler.schedule(wait=0, warmup=0, active=1, repeat=n_steps) if profile_memory else None,
+            experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True),
+            record_shapes=True,
+            profile_memory=profile_memory,
+            with_stack=True,
+        )
+        if profile
+        else nullcontext()
+    ) as prof:
         forward_times = []
         backward_times = []
         optimizer_times = []
         for _ in range(trainer_args.train_steps):
-            f, b, o = run_step(model, dummy_data, optimizer, trainer_args.run_backward, mixed_precision=trainer_args.mixed_precision)
+            f, b, o = run_step(
+                model,
+                dummy_data,
+                optimizer,
+                trainer_args.run_backward,
+                mixed_precision=trainer_args.mixed_precision,
+            )
             forward_times.append(f)
             backward_times.append(b)
             optimizer_times.append(o)
             if profile:
                 prof.step()
         torch.cuda.synchronize()
+        if profile_memory:
+            prof.export_memory_timeline("timeline.html", device="cuda")
     print(f"Forward time: {np.mean(forward_times):.4f} s")
     print(f"Backward time: {np.mean(backward_times):.4f} s")
     print(f"Optimizer time: {np.mean(optimizer_times):.4f} s")
@@ -161,6 +207,11 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
     if profile:
         prof.export_stacks("lm_profiler_stacks.txt", "self_cuda_time_total")
         print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=50))
+
+    if profile_memory:
+        torch.cuda.memory._dump_snapshot("memory_snapshot.pickle")
+        torch.cuda.memory._record_memory_history(enabled=None)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -182,7 +233,9 @@ if __name__ == "__main__":
     model_args = MODEL_CONFIGS[args.model_config]
     model_args.use_layer_norm = args.use_layer_norm
     model_args.use_triton_rmsnorm = args.use_triton_rmsnorm
-    logger.info(f"Running benchmark with model config: {args.model_config}\n{model_args}")
+    logger.info(
+        f"Running benchmark with model config: {args.model_config}\n{model_args}"
+    )
     trainer_args = TrainerArgs(
         warmup_steps=args.warmup_steps,
         train_steps=args.train_steps,

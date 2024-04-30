@@ -17,6 +17,7 @@ def get_rmsnorm_autograd_function_pytorch() -> Type:
     """
     # For example: return MyRMSNormAutogradFunctionClass
     from cs336_systems.rms import RMSNorm
+
     return RMSNorm
 
 
@@ -34,6 +35,7 @@ def get_rmsnorm_autograd_function_triton() -> Type:
     """
     # For example: return MyTritonRMSNormAutogradFunctionClass
     from cs336_systems.rms import RMSNormTriton
+
     return RMSNormTriton
 
 
@@ -56,6 +58,7 @@ def rmsnorm_backward_g_pytorch(
         Gradient of the loss with respect to g. Shape: (H,)
     """
     from cs336_systems.rms import rmsnorm_grad_weight
+
     return rmsnorm_grad_weight(x, g, grad_output, 1e-5)
 
 
@@ -78,6 +81,7 @@ def rmsnorm_backward_x_pytorch(
         Gradient of the loss with respect to x. Shape: (*, H)
     """
     from cs336_systems.rms import rmsnorm_grad_x
+
     return rmsnorm_grad_x(x, g, grad_output, 1e-5)
 
 
