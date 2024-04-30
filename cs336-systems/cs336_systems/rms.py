@@ -105,7 +105,7 @@ def rmsnorm_backward(
 
     # Compute partial gradient w.r.t. x
     first_term = grad_out * weight / norm_factor
-    second_term = tl.sum(row * grad_out * weight) * row / (H * tl.pow(norm_factor, 3))
+    second_term = tl.sum(row * grad_out * weight) * row / (H * norm_factor * norm_factor * norm_factor)
     grad_x = first_term - second_term
     tl.store(grad_x_ptr + row_idx * x_row_stride + offsets, grad_x, mask=mask)
 
