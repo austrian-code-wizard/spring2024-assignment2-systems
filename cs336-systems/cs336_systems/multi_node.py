@@ -25,10 +25,10 @@ TENSOR_SIZES: Dict[str, int] = {
 
 
 def setup(backend: str, use_cuda: bool) -> None:
-    rank = int(os.environ["Slurm_PROCID"])
-    local_rank = int(os.environ["Slurm_LOCALID"])
-    world_size = int(os.environ["Slurm_NTASKS"])
-    local_world_size = int(os.environ["Slurm_NTASKS_PER_NODE"])
+    rank = int(os.environ["SLURM_PROCID"])
+    local_rank = int(os.environ["SLURM_LOCALID"])
+    world_size = int(os.environ["SLURM_NTASKS"])
+    local_world_size = int(os.environ["SLURM_NTASKS_PER_NODE"])
     assert os.environ["MASTER_ADDR"]
     assert os.environ["MASTER_PORT"]
     timeout = timedelta(seconds=60)
