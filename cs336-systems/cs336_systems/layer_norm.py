@@ -83,5 +83,28 @@ def main(run_backward: bool = False):
             print(f"RMSNormTriton backward: {col} cols took {sum(backward_triton) / ITERS} seconds")
             print(f"Combined average time for RMSNormTriton (forward + backward): {sum([f+b for f, b in zip(forward_triton, backward_triton)]) / ITERS} seconds")
 
+        compiled_triton_norm = torch.compile(rms_norm)
+        # warmup
+        for _ in range(10):
+            compiled_triton_norm(data)
+            torch.cuda.synchronize()
+        forward_compiled = []
+        backward_compiled = []
+        for _ in range(ITERS):
+            start_compiled = time.time()
+            output = compiled_triton_norm(data)
+            torch.cuda.synchronize()
+            forward_compiled.append(time.time() - start_compiled)
+            if run_backward:
+                start_compiled = time.time()
+                output.backward(result)
+                torch.cuda.synchronize()
+                backward_compiled.append(time.time() - start_compiled)
+                data.grad = None
+        print(f"Compiled RMSNorm: {col} cols took {sum(forward_compiled) / ITERS} seconds")
+        if run_backward:
+            print(f"Compiled RMSNorm backward: {col} cols took {sum(backward_compiled) / ITERS} seconds")
+            print(f"Combined average time for Compiled RMSNorm (forward + backward): {sum([f+b for f, b in zip(forward_compiled, backward_compiled)]) / ITERS} seconds")
+
 if __name__ == "__main__":
     main(run_backward=True)
