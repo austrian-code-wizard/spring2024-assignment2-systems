@@ -39,7 +39,8 @@ class TrainerArgs:
     train_steps: int = 5
     run_backward: bool = False
     mixed_precision: bool = False
-
+    compile: bool = False
+    no_profile: bool = False
 
 @dataclass
 class OptimizerArgs:
@@ -83,23 +84,23 @@ MODEL_CONFIGS = {
 }
 
 
-def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW, enable_backward: bool, mixed_precision: bool = False) -> Tuple[float, float, float]:
+def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW, enable_backward: bool, mixed_precision: bool = False, profile: bool = True) -> Tuple[float, float, float]:
     forward_time, backward_time, optimizer_time = 0.0, 0.0, 0.0
-    with record_function('forward_pass'):
+    with record_function('forward_pass') if profile else nullcontext():
         with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
             start = timeit.default_timer()
             out = model(inputs)
             torch.cuda.synchronize()
             forward_time = timeit.default_timer() - start
     if enable_backward:
-        with record_function('backward_pass'):
+        with record_function('backward_pass') if profile else nullcontext():
             with torch.autocast(device_type="cuda") if mixed_precision else nullcontext():
                 start = timeit.default_timer()
                 loss = cross_entropy(out, inputs)
             loss.backward() 
             torch.cuda.synchronize()
             backward_time = timeit.default_timer() - start
-        with record_function('optimizer'):
+        with record_function('optimizer') if profile else nullcontext():
             start = timeit.default_timer()
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
@@ -108,7 +109,7 @@ def run_step(model: BasicsTransformerLM, inputs: torch.Tensor, optimizer: AdamW,
     return forward_time, backward_time, optimizer_time
 
 
-def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: OptimizerArgs):
+def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: OptimizerArgs, profile: bool = True):
     model = BasicsTransformerLM(
         vocab_size=model_args.vocab_size,
         context_length=model_args.context_length,
@@ -121,6 +122,8 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
         use_layernorm=model_args.use_layer_norm,
         use_triton_rmsnorm=model_args.use_triton_rmsnorm,
     ).to("cuda")
+    if trainer_args.compile:
+        model = torch.compile(model)
     optimizer = AdamW(model.parameters(), lr=optimizer_args.lr, betas=optimizer_args.betas, eps=optimizer_args.eps, weight_decay=optimizer_args.weight_decay)
     model.train()
     dummy_data = torch.randint(
@@ -128,7 +131,7 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
     ).to("cuda")
 
     for _ in range(trainer_args.warmup_steps):
-        run_step(model, dummy_data, AdamW(model.parameters()), trainer_args.run_backward, mixed_precision=trainer_args.mixed_precision)
+        run_step(model, dummy_data, AdamW(model.parameters()), trainer_args.run_backward, mixed_precision=trainer_args.mixed_precision, profile=False)
     torch.cuda.synchronize()
 
     with profile(
@@ -140,7 +143,7 @@ def main(model_args: ModelArgs, trainer_args: TrainerArgs, optimizer_args: Optim
         record_shapes=True,
         profile_memory=False,
         with_stack=True,
-    ) as prof:
+    ) if profile else nullcontext() as prof:
         forward_times = []
         backward_times = []
         optimizer_times = []
@@ -172,6 +175,8 @@ if __name__ == "__main__":
     parser.add_argument("--mixed-precision", action="store_true", default=False)
     parser.add_argument("--use-layer-norm", action="store_true", default=False)
     parser.add_argument("--use-triton-rmsnorm", action="store_true", default=False)
+    parser.add_argument("--compile", action="store_true", default=False)
+    parser.add_argument("--no-profile", action="store_true", default=False)
     args = parser.parse_args()
     model_args = MODEL_CONFIGS[args.model_config]
     model_args.use_layer_norm = args.use_layer_norm
@@ -182,7 +187,8 @@ if __name__ == "__main__":
         train_steps=args.train_steps,
         run_backward=args.run_backward,
         mixed_precision=args.mixed_precision,
+        compile=args.compile,
     )
     optimizer_args = OptimizerArgs()
     logger.info(f"Trainer args: {trainer_args}")
-    main(model_args, trainer_args, optimizer_args)
+    main(model_args, trainer_args, optimizer_args, profile=not args.no_profile)
