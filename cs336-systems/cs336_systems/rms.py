@@ -76,6 +76,40 @@ def rmsnorm_forward(
     tl.store(output_ptrs, output, mask=mask)
 
 
+@triton.jit
+def rmsnorm_backward(
+    x_ptr: tl.pointer_type,
+    weight_ptr: tl.pointer_type,
+    grad_out_ptr: tl.pointer_type,
+    x_row_stride: tl.uint32,
+    grad_x_ptr: tl.pointer_type,
+    grad_w_accum_ptr: tl.pointer_type,
+    H: tl.uint32,
+    eps: tl.float32,
+    BLOCK_SIZE: tl.constexpr
+):
+    row_idx = tl.program_id(0)
+    offsets = tl.arange(0, BLOCK_SIZE)
+    x_ptrs = x_ptr + row_idx * x_row_stride + offsets
+    weight_ptrs = weight_ptr + offsets
+    grad_out_ptrs = grad_out_ptr + row_idx * x_row_stride + offsets
+    mask = offsets < H
+    row = tl.load(x_ptrs, mask=mask, other=0)
+    weight = tl.load(weight_ptrs, mask=mask, other=0)
+    grad_out = tl.load(grad_out_ptrs, mask=mask, other=0)
+    norm_factor = tl.sqrt(tl.sum(row * row) / H + eps)
+
+    # Compute partial gradient w.r.t. weight
+    grad_w_accum = row * grad_out / norm_factor
+    tl.store(grad_w_accum_ptr + row_idx * x_row_stride + offsets, grad_w_accum, mask=mask)
+
+    # Compute partial gradient w.r.t. x
+    first_term = grad_out * weight / norm_factor
+    second_term = tl.sum(row * grad_out * weight) * row / (H * norm_factor ** 3)
+    grad_x = first_term - second_term
+    tl.store(grad_x_ptr + row_idx * x_row_stride + offsets, grad_x, mask=mask)
+
+
 class RMSNormTriton(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, eps=1e-5):
@@ -113,4 +147,29 @@ class RMSNormTriton(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx: Any, *grad_outputs: Any) -> Any:
-        raise NotImplementedError("RMSNorm backward not implemented")
+        x, weight = ctx.saved_tensors
+        eps = ctx.eps
+
+        H = x.shape[-1]
+        x_shape = x.shape
+
+        x = x.view(-1, H)
+        n_rows = x.shape[0]
+
+        # Allocate output tensors
+        grad_x = torch.empty_like(x)
+        partial_grad_weight = torch.empty_like(x)
+
+        rmsnorm_backward[(n_rows,)](
+            x,
+            weight,
+            grad_outputs[0],
+            x.stride(0),
+            grad_x,
+            partial_grad_weight,
+            H,
+            eps,
+            num_warps=16,
+            BLOCK_SIZE=ctx.BLOCK_SIZE
+        )
+        return grad_x.view(*x_shape), partial_grad_weight.sum(dim=0)
