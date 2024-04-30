@@ -192,6 +192,7 @@ def main(
                 optimizer,
                 trainer_args.run_backward,
                 mixed_precision=trainer_args.mixed_precision,
+                profile=do_profile
             )
             forward_times.append(f)
             backward_times.append(b)
@@ -247,4 +248,4 @@ if __name__ == "__main__":
     )
     optimizer_args = OptimizerArgs()
     logger.info(f"Trainer args: {trainer_args}")
-    main(model_args, trainer_args, optimizer_args, profile=not args.no_profile, profile_memory=args.profile_memory)
+    main(model_args, trainer_args, optimizer_args, do_profile=not args.no_profile, profile_memory=args.profile_memory)
