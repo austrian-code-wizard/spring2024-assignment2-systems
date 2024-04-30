@@ -33,6 +33,7 @@ class ModelArgs:
     residual_pdrop: Optional[float] = 0.05
     use_layer_norm: Optional[bool] = False
     use_triton_rmsnorm: Optional[bool] = False
+    name: str = "small"
 
 
 @dataclass
@@ -204,7 +205,7 @@ def main(
             optimizer_times.append(o)
         torch.cuda.synchronize()
         if profile_memory:
-            prof.export_memory_timeline("timeline.html", device=DEVICE)
+            prof.export_memory_timeline(f"timeline-{model_args.name}-run-backward-{trainer_args.run_backward}.html", device=DEVICE)
     print(f"Forward time: {np.mean(forward_times):.4f} s")
     print(f"Backward time: {np.mean(backward_times):.4f} s")
     print(f"Optimizer time: {np.mean(optimizer_times):.4f} s")
@@ -214,7 +215,7 @@ def main(
         print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=50))
 
     if profile_memory:
-        torch.cuda.memory._dump_snapshot("memory_snapshot.pickle")
+        torch.cuda.memory._dump_snapshot(f"memory_snapshot-{model_args.name}-run-backward-{trainer_args.run_backward}.pickle")
         torch.cuda.memory._record_memory_history(enabled=None)
 
 
@@ -239,6 +240,7 @@ if __name__ == "__main__":
     model_args = MODEL_CONFIGS[args.model_config]
     model_args.use_layer_norm = args.use_layer_norm
     model_args.use_triton_rmsnorm = args.use_triton_rmsnorm
+    model_args.name = args.model_config
     logger.info(
         f"Running benchmark with model config: {args.model_config}\n{model_args}"
     )
