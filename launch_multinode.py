@@ -47,7 +47,7 @@ def launch_slurm_jobs(backend, use_cuda, processes_per_node):
 
             cmd = [
                 "sbatch",
-                f"--partition=batch-gpu",
+                f"--partition=a2",
                 "tmp.sh"
             ]
             print(f"Launching job with command: {' '.join(cmd)} for tensor size {tensor_size} and {nprocs} processes per node.")
