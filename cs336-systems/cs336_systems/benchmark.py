@@ -122,9 +122,10 @@ def main(
     model_args: ModelArgs,
     trainer_args: TrainerArgs,
     optimizer_args: OptimizerArgs,
-    profile: bool = True,
+    do_profile: bool = True,
     profile_memory: bool = False,
 ):
+    assert not (not do_profile and profile_memory), "Cannot profile memory without profiling"
     model = BasicsTransformerLM(
         vocab_size=model_args.vocab_size,
         context_length=model_args.context_length,
@@ -178,7 +179,7 @@ def main(
             profile_memory=profile_memory,
             with_stack=True,
         )
-        if profile
+        if do_profile
         else nullcontext()
     ) as prof:
         forward_times = []
@@ -195,7 +196,7 @@ def main(
             forward_times.append(f)
             backward_times.append(b)
             optimizer_times.append(o)
-            if profile:
+            if do_profile:
                 prof.step()
         torch.cuda.synchronize()
         if profile_memory:
@@ -204,7 +205,7 @@ def main(
     print(f"Backward time: {np.mean(backward_times):.4f} s")
     print(f"Optimizer time: {np.mean(optimizer_times):.4f} s")
 
-    if profile:
+    if do_profile:
         prof.export_stacks("lm_profiler_stacks.txt", "self_cuda_time_total")
         print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=50))
 
