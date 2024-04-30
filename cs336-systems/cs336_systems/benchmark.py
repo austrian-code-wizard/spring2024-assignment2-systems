@@ -129,8 +129,10 @@ def main(
     do_profile: bool = True,
     profile_memory: bool = False,
 ):
-    logger.info(f'Do profile: {do_profile}, profile memory: {profile_memory}')
-    assert not (not do_profile and profile_memory), "Cannot profile memory without profiling"
+    logger.info(f"Do profile: {do_profile}, profile memory: {profile_memory}")
+    assert not (
+        not do_profile and profile_memory
+    ), "Cannot profile memory without profiling"
     model = BasicsTransformerLM(
         vocab_size=model_args.vocab_size,
         context_length=model_args.context_length,
@@ -177,7 +179,13 @@ def main(
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
             ],
-            schedule=torch.profiler.schedule(wait=0, warmup=0, active=1, repeat=trainer_args.train_steps) if profile_memory else None,
+            schedule=(
+                torch.profiler.schedule(
+                    wait=0, warmup=0, active=1, repeat=trainer_args.train_steps
+                )
+                if profile_memory
+                else None
+            ),
             experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True),
             record_shapes=True,
             profile_memory=profile_memory,
@@ -198,14 +206,17 @@ def main(
                 optimizer,
                 trainer_args.run_backward,
                 mixed_precision=trainer_args.mixed_precision,
-                profile=do_profile
+                profile=do_profile,
             )
             forward_times.append(f)
             backward_times.append(b)
             optimizer_times.append(o)
         torch.cuda.synchronize()
         if profile_memory:
-            prof.export_memory_timeline(f"timeline-{model_args.name}-run-backward-{trainer_args.run_backward}.html", device=DEVICE)
+            prof.export_memory_timeline(
+                f"timeline-{model_args.name}-run-backward-{trainer_args.run_backward}.html",
+                device=DEVICE,
+            )
     print(f"Forward time: {np.mean(forward_times):.4f} s")
     print(f"Backward time: {np.mean(backward_times):.4f} s")
     print(f"Optimizer time: {np.mean(optimizer_times):.4f} s")
@@ -215,7 +226,9 @@ def main(
         print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=50))
 
     if profile_memory:
-        torch.cuda.memory._dump_snapshot(f"memory_snapshot-{model_args.name}-run-backward-{trainer_args.run_backward}.pickle")
+        torch.cuda.memory._dump_snapshot(
+            f"memory_snapshot-{model_args.name}-run-backward-{trainer_args.run_backward}.pickle"
+        )
         torch.cuda.memory._record_memory_history(enabled=None)
 
 
@@ -253,4 +266,10 @@ if __name__ == "__main__":
     )
     optimizer_args = OptimizerArgs()
     logger.info(f"Trainer args: {trainer_args}")
-    main(model_args, trainer_args, optimizer_args, do_profile=not args.no_profile, profile_memory=args.profile_memory)
+    main(
+        model_args,
+        trainer_args,
+        optimizer_args,
+        do_profile=not args.no_profile,
+        profile_memory=args.profile_memory,
+    )
