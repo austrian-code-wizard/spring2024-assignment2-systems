@@ -229,6 +229,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-triton-rmsnorm", action="store_true", default=False)
     parser.add_argument("--compile", action="store_true", default=False)
     parser.add_argument("--no-profile", action="store_true", default=False)
+    parser.add_argument("--profile-memory", action="store_true", default=False)
     args = parser.parse_args()
     model_args = MODEL_CONFIGS[args.model_config]
     model_args.use_layer_norm = args.use_layer_norm
@@ -245,4 +246,4 @@ if __name__ == "__main__":
     )
     optimizer_args = OptimizerArgs()
     logger.info(f"Trainer args: {trainer_args}")
-    main(model_args, trainer_args, optimizer_args, profile=not args.no_profile)
+    main(model_args, trainer_args, optimizer_args, profile=not args.no_profile, profile_memory=args.profile_memory)
