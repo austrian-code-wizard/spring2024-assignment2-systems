@@ -125,6 +125,7 @@ def main(
     do_profile: bool = True,
     profile_memory: bool = False,
 ):
+    logger.info(f'Do profile: {do_profile}, profile memory: {profile_memory}')
     assert not (not do_profile and profile_memory), "Cannot profile memory without profiling"
     model = BasicsTransformerLM(
         vocab_size=model_args.vocab_size,
@@ -165,7 +166,7 @@ def main(
 
     if profile_memory:
         torch.cuda.memory._record_memory_history(max_entries=1000000)
-        n_steps = 3
+        n_steps = trainer_args.train_steps
 
     with (
         profile(
