@@ -2,6 +2,7 @@ import subprocess
 import argparse
 import tempfile
 import os
+import time
 
 job_script = """#!/bin/bash
 #SBATCH --cpus-per-task=4
@@ -22,7 +23,7 @@ echo "MASTER_PORT: ${{MASTER_PORT}}"
 echo "MASTER_ADDR: ${{MASTER_ADDR}}"
 
 # Execute command for each task
-srun python multi_node.py --backend {backend} --tensor_size {tensor_size} {use_cuda}
+srun python cs336-systems/cs336_systems/multi_node.py --backend {backend} --tensor_size {tensor_size} {use_cuda}
 """
 
 TENSOR_SIZES = {
@@ -52,13 +53,18 @@ def launch_slurm_jobs(backend, use_cuda, processes_per_node):
             ]
             print(f"Launching job with command: {' '.join(cmd)} for tensor size {tensor_size} and {nprocs} processes per node.")
             subprocess.run(cmd)
+            time.sleep(1)
             #os.unlink("tmp.sh")  # Clean up the temporary file after submitting the job
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Launch SLURM jobs for distributed training.")
     parser.add_argument("--backend", type=str, required=True, help="Backend for distributed training (gloo, nccl)")
     parser.add_argument("--use_cuda", action='store_true', help="Flag to use CUDA for distributed training")
+    parser.add_argument("--processes_per_node", type=int, required=True)
     args = parser.parse_args()
 
-    processes_per_node = [1, 2, 3]
+    assert args.backend in ["gloo", "nccl"], "Backend must be one of 'gloo' or 'nccl'"
+    assert args.processes_per_node in [1, 2, 3], "Processes per node must be one of 1, 2, or 3"
+    processes_per_node = [args.processes_per_node]
+    
     launch_slurm_jobs(args.backend, args.use_cuda, processes_per_node)
