@@ -187,12 +187,9 @@ def ddp_main(
     # Broadcast rank 0 model
     start = timeit.default_timer()
     if batched:
-        params = [param.data for param in model.parameters()]
-        params_flattened = torch._utils._flatten_dense_tensors(params)
-        dist.broadcast(params_flattened, 0, async_op=False)
-        unpacked_params = torch._utils._unflatten_dense_tensors(params_flattened, params)
-        for param, new_param in zip(model.parameters(), unpacked_params):
-            param.data.copy_(new_param)
+        params = torch.nn.utils.parameters_to_vector(model.parameters())
+        dist.broadcast(params, 0, async_op=False)
+        torch.nn.utils.vector_to_parameters(params, model.parameters())
     else:
         for param in model.parameters():
             dist.broadcast(param.data, 0, async_op=False)
@@ -212,16 +209,13 @@ def ddp_main(
 
         start = timeit.default_timer()
         if batched:
-            params = [param.data for param in model.parameters()]
-            params_flattened = torch._utils._flatten_dense_tensors(params)
+            params = torch.nn.utils.parameters_to_vector(model.parameters())
             if backend == "nccl":
-                dist.all_reduce(tensor=params_flattened, op=dist.ReduceOp.AVG, async_op=False)
+                dist.all_reduce(tensor=params, op=dist.ReduceOp.AVG, async_op=False)
             else:
-                dist.all_reduce(tensor=params_flattened, op=dist.ReduceOp.SUM, async_op=False)
-                params_flattened /= world_size
-            unpacked_params = torch._utils._unflatten_dense_tensors(params_flattened, params)
-            for param, new_param in zip(model.parameters(), unpacked_params):
-                param.data.copy_(new_param)
+                dist.all_reduce(tensor=params, op=dist.ReduceOp.SUM, async_op=False)
+                params /= world_size
+            torch.nn.utils.vector_to_parameters(params, model.parameters())
         else:
             for param in model.parameters():
                 if not param.requires_grad:
