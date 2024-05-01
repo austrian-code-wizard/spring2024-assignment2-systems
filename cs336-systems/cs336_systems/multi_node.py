@@ -39,12 +39,12 @@ def setup(backend: str, use_cuda: bool) -> None:
     return rank, world_size, local_rank, local_world_size
 
 
-def benchmark_all_reduce(
-    backend: str, tensor_size_str: str, use_cuda: bool
-) -> None:
+def benchmark_all_reduce(backend: str, tensor_size_str: str, use_cuda: bool) -> None:
     rank, world_size, local_rank, local_world_size = setup(backend, use_cuda)
     if rank == 0:
-        logger.debug(f"Rank: {rank}, World size: {world_size}, Local rank: {local_rank}, Local world size: {local_world_size}")
+        logger.debug(
+            f"Rank: {rank}, World size: {world_size}, Local rank: {local_rank}, Local world size: {local_world_size}"
+        )
     tensor_size = TENSOR_SIZES[tensor_size_str]
     device = torch.device(
         "cuda" if (backend == "nccl" or (backend == "gloo" and use_cuda)) else "cpu"
