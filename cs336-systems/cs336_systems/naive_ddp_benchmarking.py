@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.distributed as dist
 import logging
 import os
+from tqdm import tqdm
 import argparse
 from datetime import timedelta
 from typing import Optional
@@ -105,7 +106,7 @@ def setup_singlenode(
     backend: str = str, rank: int = None, world_size: int = None
 ) -> None:
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
+    os.environ["MASTER_PORT"] = "14322"
     dist.init_process_group(backend, rank=rank, world_size=world_size)
     if backend == "nccl":
         torch.cuda.set_device(rank)
@@ -180,21 +181,27 @@ def ddp_main(
     )
     model.train()
 
+    comm_time = 0
+
     # Broadcast rank 0 model
+    start = timeit.default_timer()
     for param in model.parameters():
         dist.broadcast(param.data, 0, async_op=False)
+    dist.barrier()
+    comm_time += timeit.default_timer() - start
 
 
     warmup_steps = 5
     num_steps = 21
     step_timer = timeit.default_timer()
-    for step in range(num_steps):
+    for step in tqdm(range(num_steps)):
         if step == warmup_steps - 1:
             step_timer = timeit.default_timer()
         out = model(data[start_index:end_index])
         loss = loss = cross_entropy(out, labels[start_index:end_index])
         loss.backward()
 
+        start = timeit.default_timer()
         for param in model.parameters():
             if not param.requires_grad:
                 continue
@@ -203,6 +210,9 @@ def ddp_main(
             else:
                 dist.all_reduce(tensor=param.grad, op=dist.ReduceOp.SUM, async_op=False)
                 param.grad /= world_size
+        dist.barrier()
+        if step >= warmup_steps:
+            comm_time += timeit.default_timer() - start
 
         optimizer.step()
         optimizer.zero_grad()
@@ -212,6 +222,7 @@ def ddp_main(
     dist.barrier()
     if rank == 0:
         logger.info(f"Time taken for {num_steps} steps: {timeit.default_timer() - step_timer}")
+        logger.info(f"Time taken for communication: {comm_time}")
 
     validate_ddp_net_equivalence(model, rank)
     cleanup()
