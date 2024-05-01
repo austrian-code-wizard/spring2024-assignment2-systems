@@ -190,10 +190,11 @@ def ddp_main(
         params = torch.nn.utils.parameters_to_vector(model.parameters())
         dist.broadcast(params, 0, async_op=False)
         torch.nn.utils.vector_to_parameters(params, model.parameters())
+        dist.barrier()
     else:
         for param in model.parameters():
             dist.broadcast(param.data, 0, async_op=False)
-    dist.barrier()
+        dist.barrier()
     comm_time += timeit.default_timer() - start
 
 
@@ -215,6 +216,7 @@ def ddp_main(
             else:
                 dist.all_reduce(tensor=params, op=dist.ReduceOp.SUM, async_op=False)
                 params /= world_size
+            dist.barrier()
             torch.nn.utils.vector_to_parameters(params, model.parameters())
         else:
             for param in model.parameters():
@@ -225,7 +227,7 @@ def ddp_main(
                 else:
                     dist.all_reduce(tensor=param.grad, op=dist.ReduceOp.SUM, async_op=False)
                     param.grad /= world_size
-        dist.barrier()
+            dist.barrier()
         if step >= warmup_steps:
             comm_time += timeit.default_timer() - start
 
