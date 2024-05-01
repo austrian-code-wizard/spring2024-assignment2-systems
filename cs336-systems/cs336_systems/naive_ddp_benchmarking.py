@@ -190,6 +190,7 @@ def ddp_main(
         params = torch.nn.utils.parameters_to_vector(model.parameters())
         dist.broadcast(params, 0, async_op=False)
         dist.barrier()
+        torch.cuda.synchronize()
         torch.nn.utils.vector_to_parameters(params, model.parameters())
     else:
         for param in model.parameters():
@@ -217,6 +218,7 @@ def ddp_main(
                 dist.all_reduce(tensor=params, op=dist.ReduceOp.SUM, async_op=False)
                 params /= world_size
             dist.barrier()
+            torch.cuda.synchronize()
             torch.nn.utils.vector_to_parameters(params, model.parameters())
         else:
             for param in model.parameters():
