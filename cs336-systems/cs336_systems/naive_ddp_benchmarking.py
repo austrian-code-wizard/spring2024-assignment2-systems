@@ -141,7 +141,7 @@ def ddp_main(
     optimizer_args: OptimizerArgs
 ):
     if rank == -1:
-        rank, _, world_size, _ = setup_multinode(backend)
+        rank, world_size, _, _ = setup_multinode(backend)
     else:
         setup_singlenode(backend, rank, world_size)
 
