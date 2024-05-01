@@ -123,6 +123,7 @@ def setup_multinode(backend: str) -> None:
 
     dist.init_process_group(backend, rank=rank, world_size=world_size, timeout=timeout)
     if backend == "nccl":
+        print(f"GOt here {local_rank}")
         torch.cuda.set_device(local_rank)
     return rank, world_size, local_rank, local_world_size
 
