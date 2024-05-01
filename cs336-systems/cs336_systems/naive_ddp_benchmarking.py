@@ -192,7 +192,7 @@ def ddp_main(
         dist.broadcast(params_flattened, 0, async_op=False)
         unpacked_params = torch._utils._unflatten_dense_tensors(params_flattened, params)
         for param, new_param in zip(model.parameters(), unpacked_params):
-            param.data = new_param
+            param.data.copy_(new_param)
     else:
         for param in model.parameters():
             dist.broadcast(param.data, 0, async_op=False)
@@ -221,7 +221,7 @@ def ddp_main(
                 params_flattened /= world_size
             unpacked_params = torch._utils._unflatten_dense_tensors(params_flattened, params)
             for param, new_param in zip(model.parameters(), unpacked_params):
-                param.data = new_param
+                param.data.copy_(new_param)
         else:
             for param in model.parameters():
                 if not param.requires_grad:
