@@ -189,8 +189,8 @@ def ddp_main(
     if batched:
         params = torch.nn.utils.parameters_to_vector(model.parameters())
         dist.broadcast(params, 0, async_op=False)
-        torch.nn.utils.vector_to_parameters(params, model.parameters())
         dist.barrier()
+        torch.nn.utils.vector_to_parameters(params, model.parameters())
     else:
         for param in model.parameters():
             dist.broadcast(param.data, 0, async_op=False)
