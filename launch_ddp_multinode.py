@@ -25,7 +25,7 @@ echo "MASTER_PORT: ${{MASTER_PORT}}"
 echo "MASTER_ADDR: ${{MASTER_ADDR}}"
 
 # Execute command for each task
-srun python cs336-systems/cs336_systems/naive_ddp_benchmarking.py --backend nccl --world_size {world_size} --model-config {model_config}
+srun python cs336-systems/cs336_systems/naive_ddp_benchmarking.py --backend nccl --multinode --world_size {world_size} --model-config {model_config}
 """
 
 
