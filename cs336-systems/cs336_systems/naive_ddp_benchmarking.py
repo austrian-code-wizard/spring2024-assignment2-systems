@@ -211,7 +211,7 @@ def ddp_main(
 
         start = timeit.default_timer()
         if batched:
-            params = torch.nn.utils.parameters_to_vector(model.parameters())
+            params = torch._utils._flatten_dense_tensors([param.grad for param in model.parameters()])
             if backend == "nccl":
                 dist.all_reduce(tensor=params, op=dist.ReduceOp.AVG, async_op=False)
             else:
@@ -219,7 +219,8 @@ def ddp_main(
                 params /= world_size
             dist.barrier()
             torch.cuda.synchronize()
-            torch.nn.utils.vector_to_parameters(params, model.parameters())
+            for param, grad in zip(model.parameters(), torch._utils._unflatten_dense_tensors(params, [p.grad for p in model.parameters()])):
+                param.grad = grad
         else:
             for param in model.parameters():
                 if not param.requires_grad:
