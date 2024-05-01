@@ -138,7 +138,8 @@ def ddp_main(
     data: torch.Tensor,
     labels: torch.Tensor,
     model_args: ModelArgs,
-    optimizer_args: OptimizerArgs
+    optimizer_args: OptimizerArgs,
+    batched: bool = False,
 ):
     if rank == -1:
         rank, world_size, _, _ = setup_multinode(backend)
@@ -185,8 +186,16 @@ def ddp_main(
 
     # Broadcast rank 0 model
     start = timeit.default_timer()
-    for param in model.parameters():
-        dist.broadcast(param.data, 0, async_op=False)
+    if batched:
+        params = [param.data for param in model.parameters()]
+        params_flattened = torch._utils._flatten_dense_tensors(params)
+        dist.broadcast(params_flattened, 0, async_op=False)
+        unpacked_params = torch._utils._unflatten_dense_tensors(params_flattened, params)
+        for param, new_param in zip(model.parameters(), unpacked_params):
+            param.data = new_param
+    else:
+        for param in model.parameters():
+            dist.broadcast(param.data, 0, async_op=False)
     dist.barrier()
     comm_time += timeit.default_timer() - start
 
@@ -202,14 +211,26 @@ def ddp_main(
         loss.backward()
 
         start = timeit.default_timer()
-        for param in model.parameters():
-            if not param.requires_grad:
-                continue
+        if batched:
+            params = [param.data for param in model.parameters()]
+            params_flattened = torch._utils._flatten_dense_tensors(params)
             if backend == "nccl":
-                dist.all_reduce(tensor=param.grad, op=dist.ReduceOp.AVG, async_op=False)
+                dist.all_reduce(tensor=params_flattened, op=dist.ReduceOp.AVG, async_op=False)
             else:
-                dist.all_reduce(tensor=param.grad, op=dist.ReduceOp.SUM, async_op=False)
-                param.grad /= world_size
+                dist.all_reduce(tensor=params_flattened, op=dist.ReduceOp.SUM, async_op=False)
+                params_flattened /= world_size
+            unpacked_params = torch._utils._unflatten_dense_tensors(params_flattened, params)
+            for param, new_param in zip(model.parameters(), unpacked_params):
+                param.data = new_param
+        else:
+            for param in model.parameters():
+                if not param.requires_grad:
+                    continue
+                if backend == "nccl":
+                    dist.all_reduce(tensor=param.grad, op=dist.ReduceOp.AVG, async_op=False)
+                else:
+                    dist.all_reduce(tensor=param.grad, op=dist.ReduceOp.SUM, async_op=False)
+                    param.grad /= world_size
         dist.barrier()
         if step >= warmup_steps:
             comm_time += timeit.default_timer() - start
@@ -239,6 +260,7 @@ def main():
         default="small",
         choices=MODEL_CONFIGS.keys(),
     )
+    parser.add_argument("--batched", action="store_true", default=False)
     args = parser.parse_args()
     
     model_cfg = MODEL_CONFIGS.keys() if args.model_config == "all" else [args.model_config]
@@ -260,11 +282,11 @@ def main():
         )
 
         if args.multinode:
-            ddp_main(-1, -1, args.backend, data, labels, model_args, optimizer_args)
+            ddp_main(-1, -1, args.backend, data, labels, model_args, optimizer_args, args.batched)
         else:
             mp.spawn(
                 ddp_main,
-                args=(args.world_size, args.backend, data, labels, model_args, optimizer_args),
+                args=(args.world_size, args.backend, data, labels, model_args, optimizer_args, args.batched),
                 nprocs=args.world_size,
                 join=True,
             )
