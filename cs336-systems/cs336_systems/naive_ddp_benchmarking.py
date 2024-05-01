@@ -221,7 +221,7 @@ def ddp_main(
 
     dist.barrier()
     if rank == 0:
-        logger.info(f"Time taken for {num_steps} steps: {timeit.default_timer() - step_timer}")
+        logger.info(f"Time taken per steps: {(timeit.default_timer() - step_timer) / (num_steps - warmup_steps)}")
         logger.info(f"Time taken for communication: {comm_time}")
 
     validate_ddp_net_equivalence(model, rank)
@@ -240,30 +240,34 @@ def main():
         choices=MODEL_CONFIGS.keys(),
     )
     args = parser.parse_args()
-    model_args = MODEL_CONFIGS[args.model_config]
-    model_args.name = args.model_config
-    optimizer_args = OptimizerArgs()
-    args = parser.parse_args()
+    
+    model_cfg = MODEL_CONFIGS.keys() if args.model_config == "all" else [args.model_config]
 
-    # Generate data
-    batch_size = 16
-    torch.manual_seed(0)
-    data = torch.randint(
-        0, model_args.vocab_size, (batch_size * args.world_size, model_args.context_length)
-    )
-    labels = torch.randint(
-        0, model_args.vocab_size, (batch_size * args.world_size, model_args.context_length)
-    )
+    for model_config in model_cfg:
+        model_args = MODEL_CONFIGS[model_config]
+        model_args.name = args.model_config
+        optimizer_args = OptimizerArgs()
+        args = parser.parse_args()
 
-    if args.multinode:
-        ddp_main(-1, -1, args.backend, data, labels, model_args, optimizer_args)
-    else:
-        mp.spawn(
-            ddp_main,
-            args=(args.world_size, args.backend, data, labels, model_args, optimizer_args),
-            nprocs=args.world_size,
-            join=True,
+        # Generate data
+        batch_size = 16
+        torch.manual_seed(0)
+        data = torch.randint(
+            0, model_args.vocab_size, (batch_size * args.world_size, model_args.context_length)
         )
+        labels = torch.randint(
+            0, model_args.vocab_size, (batch_size * args.world_size, model_args.context_length)
+        )
+
+        if args.multinode:
+            ddp_main(-1, -1, args.backend, data, labels, model_args, optimizer_args)
+        else:
+            mp.spawn(
+                ddp_main,
+                args=(args.world_size, args.backend, data, labels, model_args, optimizer_args),
+                nprocs=args.world_size,
+                join=True,
+            )
 
 
 if __name__ == "__main__":
