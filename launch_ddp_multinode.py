@@ -25,7 +25,7 @@ echo "MASTER_PORT: ${{MASTER_PORT}}"
 echo "MASTER_ADDR: ${{MASTER_ADDR}}"
 
 # Execute command for each task
-srun python cs336-systems/cs336_systems/naive_ddp_benchmarking.py --backend nccl --multinode --world_size {world_size} --model-config {model_config}
+srun python cs336-systems/cs336_systems/naive_ddp_benchmarking.py --backend nccl --multinode --world_size {world_size} --model-config {model_config} --batched
 """
 
 
@@ -34,7 +34,7 @@ def launch_slurm_jobs():
     procs_per_node = 1
     nodes = 2
     for model_cfg in ["small", "medium", "large", "xl", "2.7B"]:
-        name = f"ddp_benchmark_{model_cfg}"
+        name = f"ddp_batched_benchmark_{model_cfg}"
         with open("tmp.sh", "w+") as tmpfile:
             job_script_formatted = job_script.format(nprocs=procs_per_node, nodes=nodes, world_size=procs_per_node * nodes, model_config=model_cfg, name=name)
             tmpfile.write(job_script_formatted)
