@@ -87,11 +87,11 @@ def cleanup():
 
 
 def single_process_reference(
-        backend: str,
-        reference_model: nn.Module,
-        world_size: int,
-        data: torch.Tensor,
-        labels: torch.Tensor
+    backend: str,
+    reference_model: nn.Module,
+    world_size: int,
+    data: torch.Tensor,
+    labels: torch.Tensor,
 ):
     DEVICE = "cuda" if backend == "nccl" else "cpu"
 
@@ -110,7 +110,7 @@ def single_process_reference(
         optimizer.zero_grad()
 
         logger.debug(f"Reference: step = {step}, loss = {loss.item()}")
-    
+
     return reference_model
 
 
@@ -121,7 +121,7 @@ def ddp_main(
     data: torch.Tensor,
     labels: torch.Tensor,
     out_features: int,
-    reference: bool = True
+    reference: bool = True,
 ):
     if rank == -1:
         rank, _, world_size, _ = setup_multinode(backend)
@@ -164,7 +164,7 @@ def ddp_main(
                 param.grad /= world_size
 
         optimizer.step()
-        optimizer.zero_grad() 
+        optimizer.zero_grad()
 
         if rank == 0:
             dist.barrier()
@@ -173,10 +173,11 @@ def ddp_main(
             ref_loss.backward()
             ref_optimizer.step()
             ref_optimizer.zero_grad()
-            for param, reference_param in zip(model.parameters(), reference_model.parameters()):
+            for param, reference_param in zip(
+                model.parameters(), reference_model.parameters()
+            ):
                 assert torch.allclose(param, reference_param)
             logger.info("Model parameters are equal to reference model parameters")
-
 
         logger.debug(f"Rank {rank}: step = {step}, loss = {loss.item()}")
 

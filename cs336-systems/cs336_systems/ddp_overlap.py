@@ -3,7 +3,7 @@ import torch
 import torch.distributed as dist
 
 
-class DDP():
+class DDP:
     def __init__(self, module: torch.nn.Module):
         self.module = module
         self.handles = []
@@ -23,9 +23,13 @@ class DDP():
 
     def sync_gradient(self, p: torch.Tensor):
         if self.backend == "nccl":
-            self.handles.append(dist.all_reduce(p.grad, op=dist.ReduceOp.AVG, async_op=True))
+            self.handles.append(
+                dist.all_reduce(p.grad, op=dist.ReduceOp.AVG, async_op=True)
+            )
         else:
-            self.handles.append(dist.all_reduce(p.grad, op=dist.ReduceOp.SUM, async_op=True))
+            self.handles.append(
+                dist.all_reduce(p.grad, op=dist.ReduceOp.SUM, async_op=True)
+            )
 
     def finish_gradient_synchronization(self):
         for handle in self.handles:

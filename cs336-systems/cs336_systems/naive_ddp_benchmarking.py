@@ -198,7 +198,6 @@ def ddp_main(
         dist.barrier()
     comm_time += timeit.default_timer() - start
 
-
     warmup_steps = 5
     num_steps = 21
     step_timer = timeit.default_timer()
@@ -211,7 +210,9 @@ def ddp_main(
 
         start = timeit.default_timer()
         if batched:
-            params = torch._utils._flatten_dense_tensors([param.grad for param in model.parameters()])
+            params = torch._utils._flatten_dense_tensors(
+                [param.grad for param in model.parameters()]
+            )
             if backend == "nccl":
                 dist.all_reduce(tensor=params, op=dist.ReduceOp.AVG, async_op=False)
             else:
@@ -219,16 +220,25 @@ def ddp_main(
                 params /= world_size
             dist.barrier()
             torch.cuda.synchronize()
-            for param, grad in zip(model.parameters(), torch._utils._unflatten_dense_tensors(params, [p.grad for p in model.parameters()])):
+            for param, grad in zip(
+                model.parameters(),
+                torch._utils._unflatten_dense_tensors(
+                    params, [p.grad for p in model.parameters()]
+                ),
+            ):
                 param.grad = grad
         else:
             for param in model.parameters():
                 if not param.requires_grad:
                     continue
                 if backend == "nccl":
-                    dist.all_reduce(tensor=param.grad, op=dist.ReduceOp.AVG, async_op=False)
+                    dist.all_reduce(
+                        tensor=param.grad, op=dist.ReduceOp.AVG, async_op=False
+                    )
                 else:
-                    dist.all_reduce(tensor=param.grad, op=dist.ReduceOp.SUM, async_op=False)
+                    dist.all_reduce(
+                        tensor=param.grad, op=dist.ReduceOp.SUM, async_op=False
+                    )
                     param.grad /= world_size
             dist.barrier()
         if step >= warmup_steps:
@@ -241,7 +251,9 @@ def ddp_main(
 
     dist.barrier()
     if rank == 0:
-        logger.info(f"Time taken per steps: {(timeit.default_timer() - step_timer) / (num_steps - warmup_steps)}")
+        logger.info(
+            f"Time taken per steps: {(timeit.default_timer() - step_timer) / (num_steps - warmup_steps)}"
+        )
         logger.info(f"Time taken for communication: {comm_time}")
 
     validate_ddp_net_equivalence(model, rank)
@@ -261,8 +273,10 @@ def main():
     )
     parser.add_argument("--batched", action="store_true", default=False)
     args = parser.parse_args()
-    
-    model_cfg = MODEL_CONFIGS.keys() if args.model_config == "all" else [args.model_config]
+
+    model_cfg = (
+        MODEL_CONFIGS.keys() if args.model_config == "all" else [args.model_config]
+    )
 
     for model_config in model_cfg:
         model_args = MODEL_CONFIGS[model_config]
@@ -274,18 +288,39 @@ def main():
         batch_size = 16
         torch.manual_seed(0)
         data = torch.randint(
-            0, model_args.vocab_size, (batch_size * args.world_size, model_args.context_length)
+            0,
+            model_args.vocab_size,
+            (batch_size * args.world_size, model_args.context_length),
         )
         labels = torch.randint(
-            0, model_args.vocab_size, (batch_size * args.world_size, model_args.context_length)
+            0,
+            model_args.vocab_size,
+            (batch_size * args.world_size, model_args.context_length),
         )
 
         if args.multinode:
-            ddp_main(-1, -1, args.backend, data, labels, model_args, optimizer_args, args.batched)
+            ddp_main(
+                -1,
+                -1,
+                args.backend,
+                data,
+                labels,
+                model_args,
+                optimizer_args,
+                args.batched,
+            )
         else:
             mp.spawn(
                 ddp_main,
-                args=(args.world_size, args.backend, data, labels, model_args, optimizer_args, args.batched),
+                args=(
+                    args.world_size,
+                    args.backend,
+                    data,
+                    labels,
+                    model_args,
+                    optimizer_args,
+                    args.batched,
+                ),
                 nprocs=args.world_size,
                 join=True,
             )
