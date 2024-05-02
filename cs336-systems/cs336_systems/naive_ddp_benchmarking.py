@@ -217,7 +217,7 @@ def ddp_main(
         dist.barrier()
     comm_time += timeit.default_timer() - start
 
-    if profile_memory:
+    if profile_memory and rank == 0:
         torch.cuda.memory._record_memory_history(max_entries=1000000)
 
     step_timer = timeit.default_timer()
