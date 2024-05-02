@@ -145,6 +145,7 @@ def ddp_main(
     shard_optim: bool = False,
     profile_memory: bool = False,
     dd_bucket: bool = False,
+    multinode: bool = False,
 ):
     if rank == -1:
         rank, world_size, _, _ = setup_multinode(backend)
@@ -281,7 +282,7 @@ def ddp_main(
         logger.info(f"Time taken for communication: {comm_time}")
         if profile_memory:
             torch.cuda.memory._dump_snapshot(
-                f"memory_snapshot-{model_args.name}-optim-sharding-{shard_optim}.pickle"
+                f"memory_snapshot-{model_args.name}-optim-sharding-{shard_optim}-multinode-{multinode}.pickle"
             )
             torch.cuda.memory._record_memory_history(enabled=None)
 
@@ -343,6 +344,7 @@ def main():
                 args.shard_optim,
                 args.profile_memory,
                 args.ddp_bucket,
+                args.multinode,
             )
         else:
             mp.spawn(
@@ -358,6 +360,7 @@ def main():
                     args.shard_optim,
                     args.profile_memory,
                     args.ddp_bucket,
+                    args.multinode,
                 ),
                 nprocs=args.world_size,
                 join=True,
