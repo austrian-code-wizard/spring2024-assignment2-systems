@@ -206,7 +206,7 @@ def ddp_main(
     # Broadcast rank 0 model
     start = timeit.default_timer()
     if dd_bucket:
-        model = DDPBucketed(model, bucket_size_mb=32)
+        model = DDPBucketed(model, bucket_size_mb=64)
     elif batched:
         params = torch.nn.utils.parameters_to_vector(model.parameters())
         dist.broadcast(params, 0, async_op=False)
