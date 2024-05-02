@@ -13,7 +13,10 @@ from copy import deepcopy
 from cs336_basics.optimizer import AdamW
 from cs336_basics.nn_utils import cross_entropy
 from cs336_basics.model import BasicsTransformerLM
+from cs336_systems.optimizer_sharding import OptimizerSharded
 import timeit
+from contextlib import nullcontext
+from torch.profiler import profile, record_function, ProfilerActivity
 
 
 # setup logging
@@ -140,6 +143,8 @@ def ddp_main(
     model_args: ModelArgs,
     optimizer_args: OptimizerArgs,
     batched: bool = False,
+    shard_optim: bool = False,
+    profile_memory: bool = False,
 ):
     if rank == -1:
         rank, world_size, _, _ = setup_multinode(backend)
@@ -157,6 +162,10 @@ def ddp_main(
     partition = data.size(0) // world_size
     start_index = rank * partition
     end_index = start_index + partition
+
+    warmup_steps = 5
+    num_steps = 21
+        
     data = data.to(DEVICE)
     labels = labels.to(DEVICE)
 
@@ -173,13 +182,23 @@ def ddp_main(
         use_triton_rmsnorm=model_args.use_triton_rmsnorm,
     ).to(DEVICE)
 
-    optimizer = AdamW(
-        model.parameters(),
-        lr=optimizer_args.lr,
-        betas=optimizer_args.betas,
-        eps=optimizer_args.eps,
-        weight_decay=optimizer_args.weight_decay,
-    )
+    if shard_optim:
+        optimizer = OptimizerSharded(
+            model.parameters(),
+            AdamW,
+            lr=optimizer_args.lr,
+            betas=optimizer_args.betas,
+            eps=optimizer_args.eps,
+            weight_decay=optimizer_args.weight_decay,
+        )
+    else:
+        optimizer = AdamW(
+            model.parameters(),
+            lr=optimizer_args.lr,
+            betas=optimizer_args.betas,
+            eps=optimizer_args.eps,
+            weight_decay=optimizer_args.weight_decay,
+        )
     model.train()
 
     comm_time = 0
@@ -198,56 +217,75 @@ def ddp_main(
         dist.barrier()
     comm_time += timeit.default_timer() - start
 
-    warmup_steps = 5
-    num_steps = 21
-    step_timer = timeit.default_timer()
-    for step in tqdm(range(num_steps)):
-        if step == warmup_steps - 1:
-            step_timer = timeit.default_timer()
-        out = model(data[start_index:end_index])
-        loss = loss = cross_entropy(out, labels[start_index:end_index])
-        loss.backward()
+    with (
+        profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            schedule=(
+                torch.profiler.schedule(
+                    wait=0, warmup=warmup_steps, active=1, repeat=num_steps - warmup_steps
+                )
+            ),
+            experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True),
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True,
+        )
+        if profile_memory
+        else nullcontext()
+    ) as prof:
+        step_timer = timeit.default_timer()
+        for step in tqdm(range(num_steps)):
+            if step == warmup_steps - 1:
+                step_timer = timeit.default_timer()
+            out = model(data[start_index:end_index])
+            loss = loss = cross_entropy(out, labels[start_index:end_index])
+            loss.backward()
 
-        start = timeit.default_timer()
-        if batched:
-            params = torch._utils._flatten_dense_tensors(
-                [param.grad for param in model.parameters()]
-            )
-            if backend == "nccl":
-                dist.all_reduce(tensor=params, op=dist.ReduceOp.AVG, async_op=False)
-            else:
-                dist.all_reduce(tensor=params, op=dist.ReduceOp.SUM, async_op=False)
-                params /= world_size
-            dist.barrier()
-            torch.cuda.synchronize()
-            for param, grad in zip(
-                model.parameters(),
-                torch._utils._unflatten_dense_tensors(
-                    params, [p.grad for p in model.parameters()]
-                ),
-            ):
-                param.grad = grad
-        else:
-            for param in model.parameters():
-                if not param.requires_grad:
-                    continue
+            start = timeit.default_timer()
+            if batched:
+                params = torch._utils._flatten_dense_tensors(
+                    [param.grad for param in model.parameters()]
+                )
                 if backend == "nccl":
-                    dist.all_reduce(
-                        tensor=param.grad, op=dist.ReduceOp.AVG, async_op=False
-                    )
+                    dist.all_reduce(tensor=params, op=dist.ReduceOp.AVG, async_op=False)
                 else:
-                    dist.all_reduce(
-                        tensor=param.grad, op=dist.ReduceOp.SUM, async_op=False
-                    )
-                    param.grad /= world_size
-            dist.barrier()
-        if step >= warmup_steps:
-            comm_time += timeit.default_timer() - start
+                    dist.all_reduce(tensor=params, op=dist.ReduceOp.SUM, async_op=False)
+                    params /= world_size
+                dist.barrier()
+                torch.cuda.synchronize()
+                for param, grad in zip(
+                    model.parameters(),
+                    torch._utils._unflatten_dense_tensors(
+                        params, [p.grad for p in model.parameters()]
+                    ),
+                ):
+                    param.grad = grad
+            else:
+                for param in model.parameters():
+                    if not param.requires_grad:
+                        continue
+                    if backend == "nccl":
+                        dist.all_reduce(
+                            tensor=param.grad, op=dist.ReduceOp.AVG, async_op=False
+                        )
+                    else:
+                        dist.all_reduce(
+                            tensor=param.grad, op=dist.ReduceOp.SUM, async_op=False
+                        )
+                        param.grad /= world_size
+                dist.barrier()
+            if step >= warmup_steps:
+                comm_time += timeit.default_timer() - start
 
-        optimizer.step()
-        optimizer.zero_grad()
+            optimizer.step()
+            optimizer.zero_grad()
+            if prof:
+                prof.step()
 
-        logger.debug(f"Rank {rank}: step = {step}, loss = {loss.item()}")
+            logger.debug(f"Rank {rank}: step = {step}, loss = {loss.item()}")
 
     dist.barrier()
     if rank == 0:
@@ -255,6 +293,10 @@ def ddp_main(
             f"Time taken per steps: {(timeit.default_timer() - step_timer) / (num_steps - warmup_steps)}"
         )
         logger.info(f"Time taken for communication: {comm_time}")
+        if profile_memory:
+            torch.cuda.memory._dump_snapshot(
+                f"memory_snapshot-{model_args.name}-optim-sharding-{shard_optim}.pickle"
+            )
 
     validate_ddp_net_equivalence(model, rank)
     cleanup()
@@ -265,6 +307,8 @@ def main():
     parser.add_argument("--backend", type=str, required=True)
     parser.add_argument("--multinode", action="store_true", default=False)
     parser.add_argument("--world_size", type=int, default=1)
+    parser.add_argument("--shard-optim", action="store_true", default=False)
+    parser.add_argument("--profile-memory", action="store_true", default=False)
     parser.add_argument(
         "--model-config",
         type=str,
@@ -308,6 +352,8 @@ def main():
                 model_args,
                 optimizer_args,
                 args.batched,
+                args.shard_optim,
+                args.profile_memory,
             )
         else:
             mp.spawn(
@@ -320,6 +366,8 @@ def main():
                     model_args,
                     optimizer_args,
                     args.batched,
+                    args.shard_optim,
+                    args.profile_memory,
                 ),
                 nprocs=args.world_size,
                 join=True,
