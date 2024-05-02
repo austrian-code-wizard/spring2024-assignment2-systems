@@ -302,7 +302,7 @@ def main():
         "--model-config",
         type=str,
         default="small",
-        choices=MODEL_CONFIGS.keys(),
+        choices=list(MODEL_CONFIGS.keys()) + ["all"],
     )
     parser.add_argument("--batched", action="store_true", default=False)
     args = parser.parse_args()
