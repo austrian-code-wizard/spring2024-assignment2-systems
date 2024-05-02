@@ -180,7 +180,7 @@ class RMSNormTritonFunc(torch.autograd.Function):
             num_warps=16,
             BLOCK_SIZE=ctx.BLOCK_SIZE,
         )
-        return grad_x.view(*x_shape), partial_grad_weight.sum(dim=0)
+        return grad_x.view(*x_shape), partial_grad_weight.sum(dim=0), None
 
 
 class RMSNormTriton(torch.nn.Module):
