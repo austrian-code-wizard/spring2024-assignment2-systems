@@ -165,6 +165,9 @@ def ddp_main(
 
     warmup_steps = 5
     num_steps = 21
+
+    if profile_memory:
+        torch.cuda.memory._record_memory_history(max_entries=1000000)
         
     data = data.to(DEVICE)
     labels = labels.to(DEVICE)
@@ -297,6 +300,7 @@ def ddp_main(
             torch.cuda.memory._dump_snapshot(
                 f"memory_snapshot-{model_args.name}-optim-sharding-{shard_optim}.pickle"
             )
+            torch.cuda.memory._record_memory_history(enabled=None)
 
     validate_ddp_net_equivalence(model, rank)
     cleanup()
