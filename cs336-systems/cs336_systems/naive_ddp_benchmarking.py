@@ -165,9 +165,6 @@ def ddp_main(
 
     warmup_steps = 5
     num_steps = 21
-
-    if profile_memory:
-        torch.cuda.memory._record_memory_history(max_entries=1000000)
         
     data = data.to(DEVICE)
     labels = labels.to(DEVICE)
@@ -219,6 +216,9 @@ def ddp_main(
             dist.broadcast(param.data, 0, async_op=False)
         dist.barrier()
     comm_time += timeit.default_timer() - start
+
+    if profile_memory:
+        torch.cuda.memory._record_memory_history(max_entries=1000000)
 
     step_timer = timeit.default_timer()
     for step in tqdm(range(num_steps)):
