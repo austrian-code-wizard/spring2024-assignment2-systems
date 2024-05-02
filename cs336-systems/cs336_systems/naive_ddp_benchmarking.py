@@ -15,8 +15,7 @@ from cs336_basics.nn_utils import cross_entropy
 from cs336_basics.model import BasicsTransformerLM
 from cs336_systems.optimizer_sharding import OptimizerSharded
 import timeit
-from contextlib import nullcontext
-from torch.profiler import profile, record_function, ProfilerActivity
+from cs336_systems.ddp_bucket import DDPBucketed
 
 
 # setup logging
@@ -145,6 +144,7 @@ def ddp_main(
     batched: bool = False,
     shard_optim: bool = False,
     profile_memory: bool = False,
+    dd_bucket: bool = False,
 ):
     if rank == -1:
         rank, world_size, _, _ = setup_multinode(backend)
@@ -205,7 +205,9 @@ def ddp_main(
 
     # Broadcast rank 0 model
     start = timeit.default_timer()
-    if batched:
+    if dd_bucket:
+        model = DDPBucketed(model, bucket_size_mb=32)
+    elif batched:
         params = torch.nn.utils.parameters_to_vector(model.parameters())
         dist.broadcast(params, 0, async_op=False)
         dist.barrier()
@@ -229,7 +231,9 @@ def ddp_main(
         loss.backward()
 
         start = timeit.default_timer()
-        if batched:
+        if dd_bucket:
+            model.finish_gradient_synchronization()
+        elif batched:
             params = torch._utils._flatten_dense_tensors(
                 [param.grad for param in model.parameters()]
             )
@@ -292,6 +296,7 @@ def main():
     parser.add_argument("--world_size", type=int, default=1)
     parser.add_argument("--shard-optim", action="store_true", default=False)
     parser.add_argument("--profile-memory", action="store_true", default=False)
+    parser.add_argument("--ddp-bucket", action="store_true", default=False)
     parser.add_argument(
         "--model-config",
         type=str,
@@ -337,6 +342,7 @@ def main():
                 args.batched,
                 args.shard_optim,
                 args.profile_memory,
+                args.ddp_bucket,
             )
         else:
             mp.spawn(
@@ -351,6 +357,7 @@ def main():
                     args.batched,
                     args.shard_optim,
                     args.profile_memory,
+                    args.ddp_bucket,
                 ),
                 nprocs=args.world_size,
                 join=True,
